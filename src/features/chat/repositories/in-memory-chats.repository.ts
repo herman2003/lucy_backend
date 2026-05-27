@@ -89,6 +89,21 @@ export class InMemoryChatsRepository implements ChatsRepository {
     return stored;
   }
 
+  async patchThread(
+    uid: string,
+    chatId: string,
+    patch: { title?: string },
+  ): Promise<void> {
+    const thread = this.findThread(uid, chatId);
+    if (!thread) {
+      throw new Error(`Chat thread not found: ${chatId}`);
+    }
+    if (patch.title !== undefined) {
+      thread.title = patch.title;
+    }
+    thread.updatedAt = new Date().toISOString();
+  }
+
   private findThread(uid: string, chatId: string): PersistedChatThread | undefined {
     return (this.threadsByUid.get(uid) ?? []).find((t) => t.id === chatId);
   }

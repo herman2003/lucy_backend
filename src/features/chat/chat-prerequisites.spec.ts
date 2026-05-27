@@ -16,6 +16,7 @@ import { ChatPrerequisitesService } from './services/chat-prerequisites.service'
 import { InMemoryChatsRepository } from './repositories/in-memory-chats.repository';
 import { CHATS_REPOSITORY } from './repositories/chats.repository.port';
 import { ChatService } from './services/chat.service';
+import { ChatStreamService } from './services/chat-stream.service';
 import { FirebaseAuthGuard } from '../../core/auth/firebase-auth.guard';
 import { FirebaseAuthService } from '../../core/auth/firebase-auth.service';
 
@@ -44,6 +45,13 @@ describe('ChatPrerequisitesService (CHAT-02)', () => {
       controllers: [ChatController],
       providers: [
         ChatService,
+        {
+          provide: ChatStreamService,
+          useValue: {
+            assertCanStream: jest.fn(),
+            streamMessage: jest.fn(),
+          },
+        },
         ChatPrerequisitesService,
         InMemoryChatsRepository,
         { provide: CHATS_REPOSITORY, useExisting: InMemoryChatsRepository },

@@ -28,4 +28,10 @@ export interface ChatsRepository {
     chatId: string,
     message: Omit<PersistedChatMessage, 'chatId'>,
   ): Promise<PersistedChatMessage>;
+
+  patchThread(
+    uid: string,
+    chatId: string,
+    patch: { title?: string },
+  ): Promise<void>;
 }

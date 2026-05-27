@@ -133,6 +133,26 @@ export class FirestoreChatsRepository implements ChatsRepository {
     };
   }
 
+  async patchThread(
+    uid: string,
+    chatId: string,
+    patch: { title?: string },
+  ): Promise<void> {
+    const threadRef = this.chatsCollection(uid).doc(chatId);
+    const threadSnap = await threadRef.get();
+    if (!threadSnap.exists) {
+      throw new Error(`Chat thread not found: ${chatId}`);
+    }
+
+    const updates: Partial<FirestoreChatThreadData> = {
+      updatedAt: new Date().toISOString(),
+    };
+    if (patch.title !== undefined) {
+      updates.title = patch.title;
+    }
+    await threadRef.set(updates, { merge: true });
+  }
+
   private chatsCollection(uid: string): admin.firestore.CollectionReference {
     return admin.firestore().collection('users').doc(uid).collection('chats');
   }
