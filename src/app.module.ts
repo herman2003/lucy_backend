@@ -10,6 +10,7 @@ import { OnboardingModule } from './features/onboarding/onboarding.module';
 import { DocumentsModule } from './features/documents/documents.module';
 import { RetrievalModule } from './features/retrieval/retrieval.module';
 import { ChatModule } from './features/chat/chat.module';
+import { QuizModule } from './features/quiz/quiz.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -24,6 +25,7 @@ import { HealthController } from './health/health.controller';
     DocumentsModule,
     RetrievalModule,
     ChatModule,
+    QuizModule,
   ],
   controllers: [HealthController],
 })
