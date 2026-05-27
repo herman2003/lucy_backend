@@ -8,10 +8,12 @@ import {
 } from '../dto/create-chat.dto';
 import type { ListChatMessagesQueryDto } from '../dto/list-chat-messages-query.dto';
 import type { PersistedChatMessage, PersistedChatThread } from '../domain/chat.types';
+import type { ChatEligibilityDto } from '../dto/chat-eligibility.dto';
 import {
   CHATS_REPOSITORY,
   type ChatsRepository,
 } from '../repositories/chats.repository.port';
+import { ChatPrerequisitesService } from './chat-prerequisites.service';
 
 export type ChatThreadListItemDto = {
   id: string;
@@ -41,7 +43,12 @@ export class ChatService {
   constructor(
     @Inject(CHATS_REPOSITORY)
     private readonly chatsRepository: ChatsRepository,
+    private readonly chatPrerequisites: ChatPrerequisitesService,
   ) {}
+
+  getEligibility(uid: string): Promise<ChatEligibilityDto> {
+    return this.chatPrerequisites.getEligibility(uid);
+  }
 
   async listThreads(uid: string): Promise<ChatThreadListItemDto[]> {
     const threads = await this.chatsRepository.listThreads(uid);

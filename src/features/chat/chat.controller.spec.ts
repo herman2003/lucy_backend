@@ -4,9 +4,19 @@ import { FirebaseAuthGuard } from '../../core/auth/firebase-auth.guard';
 import { FirebaseAuthService } from '../../core/auth/firebase-auth.service';
 import { LucyErrorCodes } from '../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../core/errors/lucy-api.error';
+import { InMemoryUsersStore } from '../../core/persistence/in-memory-users.store';
+import { InMemoryDocumentChunksRepository } from '../documents/repositories/in-memory-document-chunks.repository';
+import { InMemoryDocumentsRepository } from '../documents/repositories/in-memory-documents.repository';
+import { DOCUMENT_CHUNKS_REPOSITORY } from '../documents/repositories/document-chunks.repository.port';
+import { DOCUMENTS_REPOSITORY } from '../documents/repositories/documents.repository.port';
+import { DOCUMENTS_STORAGE } from '../documents/storage/documents-storage.port';
+import { InMemoryDocumentsStorage } from '../documents/storage/in-memory-documents.storage';
+import { InMemoryUsersProfileRepository } from '../users/repositories/in-memory-users-profile.repository';
+import { USERS_PROFILE_REPOSITORY } from '../users/repositories/users.repository.port';
 import { ChatController } from './chat.controller';
 import { InMemoryChatsRepository } from './repositories/in-memory-chats.repository';
 import { CHATS_REPOSITORY } from './repositories/chats.repository.port';
+import { ChatPrerequisitesService } from './services/chat-prerequisites.service';
 import { ChatService } from './services/chat.service';
 
 describe('ChatController (CHAT-01)', () => {
@@ -16,12 +26,27 @@ describe('ChatController (CHAT-01)', () => {
   const uidB = 'dev-user-chat-b';
 
   beforeEach(async () => {
+    const usersStore = new InMemoryUsersStore();
     const moduleRef: TestingModule = await Test.createTestingModule({
       controllers: [ChatController],
       providers: [
         ChatService,
+        ChatPrerequisitesService,
         InMemoryChatsRepository,
         { provide: CHATS_REPOSITORY, useExisting: InMemoryChatsRepository },
+        {
+          provide: USERS_PROFILE_REPOSITORY,
+          useValue: new InMemoryUsersProfileRepository(usersStore),
+        },
+        InMemoryDocumentsStorage,
+        InMemoryDocumentsRepository,
+        InMemoryDocumentChunksRepository,
+        { provide: DOCUMENTS_STORAGE, useExisting: InMemoryDocumentsStorage },
+        { provide: DOCUMENTS_REPOSITORY, useExisting: InMemoryDocumentsRepository },
+        {
+          provide: DOCUMENT_CHUNKS_REPOSITORY,
+          useExisting: InMemoryDocumentChunksRepository,
+        },
         {
           provide: FirebaseAuthService,
           useValue: { verifyIdToken: jest.fn() },

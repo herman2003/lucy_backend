@@ -21,6 +21,12 @@ export class ChatController {
     return this.chatService.listThreads(uid);
   }
 
+  @Get('eligibility')
+  async getEligibility(@Req() request: FirebaseAuthRequest) {
+    const uid = this.requireUid(request);
+    return this.chatService.getEligibility(uid);
+  }
+
   @Post()
   async createThread(
     @Req() request: FirebaseAuthRequest,
