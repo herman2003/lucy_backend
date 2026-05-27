@@ -24,9 +24,11 @@ import { DEFAULT_CHAT_TITLE } from '../dto/create-chat.dto';
 import type { ChatSseEvent } from '../domain/chat-sse.types';
 import { InMemoryChatsRepository } from '../repositories/in-memory-chats.repository';
 import { CHATS_REPOSITORY } from '../repositories/chats.repository.port';
+import { ChatActiveStreamRegistry } from './chat-active-stream.registry';
 import { ChatPrerequisitesService } from './chat-prerequisites.service';
 import { ChatRagService } from './chat-rag.service';
 import { ChatStreamService } from './chat-stream.service';
+import { ChatService } from './chat.service';
 
 const validProfile = {
   primary_role: 'student' as const,
@@ -50,6 +52,7 @@ async function collectSseEvents(
 
 describe('ChatStreamService (CHAT-05)', () => {
   let streamService: ChatStreamService;
+  let activeStreams: ChatActiveStreamRegistry;
   let chatsRepository: InMemoryChatsRepository;
   let documentsRepo: InMemoryDocumentsRepository;
   let chunksRepo: InMemoryDocumentChunksRepository;
@@ -64,7 +67,9 @@ describe('ChatStreamService (CHAT-05)', () => {
       imports: [AppConfigModule, LlmModule, PromptModule],
       providers: [
         ChatStreamService,
+        ChatService,
         ChatRagService,
+        ChatActiveStreamRegistry,
         ChatPrerequisitesService,
         RetrievalService,
         InMemoryChatsRepository,
@@ -94,6 +99,7 @@ describe('ChatStreamService (CHAT-05)', () => {
       .compile();
 
     streamService = moduleRef.get(ChatStreamService);
+    activeStreams = moduleRef.get(ChatActiveStreamRegistry);
     chatsRepository = moduleRef.get(InMemoryChatsRepository);
     documentsRepo = moduleRef.get(InMemoryDocumentsRepository);
     chunksRepo = moduleRef.get(InMemoryDocumentChunksRepository);
@@ -178,6 +184,32 @@ describe('ChatStreamService (CHAT-05)', () => {
 
     const updatedThread = await chatsRepository.getThread(uid, thread.id);
     expect(updatedThread?.title).toBe('Qu’est-ce que l’entropie ?');
+  });
+
+  it('sendMessage returns user and assistant messages without SSE', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithoutChunks();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+
+    const result = await streamService.sendMessage(uid, thread.id, 'Question JSON');
+
+    expect(result.userMessage.role).toBe('user');
+    expect(result.assistantMessage.role).toBe('assistant');
+    expect(result.assistantMessage.status).toBe('completed');
+    expect(result.assistantMessage.content).toBe(MOCK_STREAM_FULL_TEXT);
+  });
+
+  it('assertCanStream throws CHAT_STREAM_IN_PROGRESS when a stream is active', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithoutChunks();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    activeStreams.acquire(uid, thread.id);
+
+    await expect(streamService.assertCanStream(uid, thread.id)).rejects.toMatchObject({
+      error: LucyErrorCodes.CHAT_STREAM_IN_PROGRESS,
+    });
+
+    activeStreams.release(uid, thread.id);
   });
 
   it('streams with empty sources when retrieval returns no hits', async () => {

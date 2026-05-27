@@ -18,6 +18,7 @@ import { InMemoryChatsRepository } from './repositories/in-memory-chats.reposito
 import { CHATS_REPOSITORY } from './repositories/chats.repository.port';
 import { ChatPrerequisitesService } from './services/chat-prerequisites.service';
 import { ChatService } from './services/chat.service';
+import { ChatActiveStreamRegistry } from './services/chat-active-stream.registry';
 import { ChatStreamService } from './services/chat-stream.service';
 
 describe('ChatController (CHAT-01)', () => {
@@ -40,6 +41,7 @@ describe('ChatController (CHAT-01)', () => {
           },
         },
         ChatPrerequisitesService,
+        ChatActiveStreamRegistry,
         InMemoryChatsRepository,
         { provide: CHATS_REPOSITORY, useExisting: InMemoryChatsRepository },
         {

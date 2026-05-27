@@ -7,3 +7,8 @@ export function formatChatSseEvent(event: ChatSseEventName, data: unknown): stri
 export function formatChatSsePayload(event: ChatSseEvent): string {
   return formatChatSseEvent(event.event, event.data);
 }
+
+/** SSE comment heartbeat (spec §4.4 — every 15s during long streams). */
+export function formatChatSsePing(): string {
+  return ': ping\n\n';
+}

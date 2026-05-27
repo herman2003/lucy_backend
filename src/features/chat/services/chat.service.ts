@@ -13,6 +13,7 @@ import {
   CHATS_REPOSITORY,
   type ChatsRepository,
 } from '../repositories/chats.repository.port';
+import { ChatActiveStreamRegistry } from './chat-active-stream.registry';
 import { ChatPrerequisitesService } from './chat-prerequisites.service';
 
 export type ChatThreadListItemDto = {
@@ -44,6 +45,7 @@ export class ChatService {
     @Inject(CHATS_REPOSITORY)
     private readonly chatsRepository: ChatsRepository,
     private readonly chatPrerequisites: ChatPrerequisitesService,
+    private readonly activeStreams: ChatActiveStreamRegistry,
   ) {}
 
   getEligibility(uid: string): Promise<ChatEligibilityDto> {
@@ -64,6 +66,12 @@ export class ChatService {
       createdAt: thread.createdAt,
       updatedAt: thread.updatedAt,
     };
+  }
+
+  async deleteThread(uid: string, chatId: string): Promise<void> {
+    await this.requireThread(uid, chatId);
+    this.activeStreams.assertNotActive(uid, chatId);
+    await this.chatsRepository.deleteThread(uid, chatId);
   }
 
   async listMessages(

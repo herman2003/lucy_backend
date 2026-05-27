@@ -4,17 +4,45 @@ import { LLM_STREAMING_PORT } from '../../../core/llm/llm-streaming.tokens';
 import type { LlmStreamingPort } from '../../../core/llm/llm-streaming.port';
 import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
+import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
 import { RetrievalService } from '../../retrieval/services/retrieval.service';
-import { CHAT_AUTO_TITLE_MAX_LENGTH, CHAT_RETRIEVAL_LIMIT } from '../chat.constants';
+import {
+  CHAT_AUTO_TITLE_MAX_LENGTH,
+  CHAT_RETRIEVAL_LIMIT,
+} from '../chat.constants';
 import { DEFAULT_CHAT_TITLE } from '../dto/create-chat.dto';
+import type { SendChatMessageResponseDto } from '../dto/send-chat-message-response.dto';
 import type { ChatSseEvent } from '../domain/chat-sse.types';
-import type { PersistedChatThread } from '../domain/chat.types';
+import type {
+  ChatSourceRecord,
+  PersistedChatMessage,
+  PersistedChatThread,
+} from '../domain/chat.types';
 import {
   CHATS_REPOSITORY,
   type ChatsRepository,
 } from '../repositories/chats.repository.port';
+import { ChatActiveStreamRegistry } from './chat-active-stream.registry';
 import { ChatPrerequisitesService } from './chat-prerequisites.service';
 import { ChatRagService } from './chat-rag.service';
+import type { ChatMessageDto } from './chat.service';
+
+type TurnContext = {
+  thread: PersistedChatThread;
+  learnerProfile: LearnerProfile;
+  historyBefore: PersistedChatMessage[];
+  isFirstUserTurn: boolean;
+  userMessage: PersistedChatMessage;
+};
+
+type CompleteTurnOptions = {
+  onTextDelta?: (delta: string) => void;
+};
+
+type CompleteTurnResult = {
+  assistantMessage: PersistedChatMessage;
+  sources: ChatSourceRecord[];
+};
 
 @Injectable()
 export class ChatStreamService {
@@ -24,6 +52,7 @@ export class ChatStreamService {
     private readonly chatPrerequisites: ChatPrerequisitesService,
     private readonly retrievalService: RetrievalService,
     private readonly chatRag: ChatRagService,
+    private readonly activeStreams: ChatActiveStreamRegistry,
     @Inject(LLM_STREAMING_PORT)
     private readonly llmStreaming: LlmStreamingPort,
   ) {}
@@ -31,8 +60,28 @@ export class ChatStreamService {
   /** Guards that must run before opening the SSE response (JSON errors). */
   async assertCanStream(uid: string, chatId: string): Promise<void> {
     await this.requireThread(uid, chatId);
+    this.activeStreams.assertNotActive(uid, chatId);
     await this.chatPrerequisites.requireLearnerProfile(uid);
     await this.chatPrerequisites.requireActiveDocuments(uid);
+  }
+
+  async sendMessage(
+    uid: string,
+    chatId: string,
+    content: string,
+  ): Promise<SendChatMessageResponseDto> {
+    await this.assertCanStream(uid, chatId);
+    this.activeStreams.acquire(uid, chatId);
+    try {
+      const turn = await this.beginTurn(uid, chatId, content);
+      const { assistantMessage } = await this.completeTurn(uid, chatId, content, turn);
+      return {
+        userMessage: toMessageDto(turn.userMessage),
+        assistantMessage: toMessageDto(assistantMessage),
+      };
+    } finally {
+      this.activeStreams.release(uid, chatId);
+    }
   }
 
   async *streamMessage(
@@ -40,72 +89,42 @@ export class ChatStreamService {
     chatId: string,
     content: string,
   ): AsyncGenerator<ChatSseEvent> {
+    this.activeStreams.acquire(uid, chatId);
     try {
-      const thread = await this.requireThread(uid, chatId);
-      const learnerProfile = await this.chatPrerequisites.requireLearnerProfile(uid);
-      await this.chatPrerequisites.requireActiveDocuments(uid);
-
-      const historyBefore = await this.chatsRepository.listMessages(uid, chatId, {
-        limit: 100,
-      });
-      const isFirstUserTurn = !historyBefore.some((message) => message.role === 'user');
-
-      const userMessage = await this.chatsRepository.appendMessage(uid, chatId, {
-        id: newMessageId(),
-        role: 'user',
-        content,
-        createdAt: new Date().toISOString(),
-      });
+      const turn = await this.beginTurn(uid, chatId, content);
 
       yield {
         event: 'user_message',
         data: {
-          id: userMessage.id,
+          id: turn.userMessage.id,
           role: 'user',
-          content: userMessage.content,
-          createdAt: userMessage.createdAt,
+          content: turn.userMessage.content,
+          createdAt: turn.userMessage.createdAt,
         },
       };
 
-      const hits = await this.retrievalService.search(uid, {
-        query: content,
-        limit: CHAT_RETRIEVAL_LIMIT,
-      });
+      const deltas: string[] = [];
+      const { assistantMessage, sources } = await this.completeTurn(
+        uid,
+        chatId,
+        content,
+        turn,
+        {
+          onTextDelta: (delta) => {
+            deltas.push(delta);
+          },
+        },
+      );
 
-      const systemPrompt = this.chatRag.buildSystemPrompt(learnerProfile);
-      const userPrompt = this.chatRag.buildUserPrompt(historyBefore, content, hits);
-
-      let assistantText = '';
-      for await (const delta of this.llmStreaming.streamText({
-        systemPrompt,
-        userPrompt,
-      })) {
-        assistantText += delta;
+      for (const delta of deltas) {
         yield { event: 'text_delta', data: { delta } };
       }
 
-      const sources = await this.chatRag.resolveSources(assistantText, hits);
       yield { event: 'sources', data: { sources } };
-
-      const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
-        id: newMessageId(),
-        role: 'assistant',
-        content: assistantText,
-        createdAt: new Date().toISOString(),
-        status: 'completed',
-        sources,
-      });
-
-      if (isFirstUserTurn && thread.title === DEFAULT_CHAT_TITLE) {
-        await this.chatsRepository.patchThread(uid, chatId, {
-          title: buildAutoTitle(content),
-        });
-      }
-
       yield {
         event: 'done',
         data: {
-          userMessageId: userMessage.id,
+          userMessageId: turn.userMessage.id,
           assistantMessage: {
             id: assistantMessage.id,
             role: 'assistant',
@@ -125,7 +144,74 @@ export class ChatStreamService {
           message: apiError.message,
         },
       };
+    } finally {
+      this.activeStreams.release(uid, chatId);
     }
+  }
+
+  private async beginTurn(
+    uid: string,
+    chatId: string,
+    content: string,
+  ): Promise<TurnContext> {
+    const thread = await this.requireThread(uid, chatId);
+    const learnerProfile = await this.chatPrerequisites.requireLearnerProfile(uid);
+    await this.chatPrerequisites.requireActiveDocuments(uid);
+
+    const historyBefore = await this.chatsRepository.listMessages(uid, chatId, {
+      limit: 100,
+    });
+    const isFirstUserTurn = !historyBefore.some((message) => message.role === 'user');
+
+    const userMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+      id: newMessageId(),
+      role: 'user',
+      content,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { thread, learnerProfile, historyBefore, isFirstUserTurn, userMessage };
+  }
+
+  private async completeTurn(
+    uid: string,
+    chatId: string,
+    content: string,
+    turn: TurnContext,
+    options: CompleteTurnOptions = {},
+  ): Promise<CompleteTurnResult> {
+    const hits = await this.retrievalService.search(uid, {
+      query: content,
+      limit: CHAT_RETRIEVAL_LIMIT,
+    });
+
+    const systemPrompt = this.chatRag.buildSystemPrompt(turn.learnerProfile);
+    const userPrompt = this.chatRag.buildUserPrompt(turn.historyBefore, content, hits);
+
+    let assistantText = '';
+    for await (const delta of this.llmStreaming.streamText({ systemPrompt, userPrompt })) {
+      assistantText += delta;
+      options.onTextDelta?.(delta);
+    }
+
+    const sources = await this.chatRag.resolveSources(assistantText, hits);
+
+    const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+      id: newMessageId(),
+      role: 'assistant',
+      content: assistantText,
+      createdAt: new Date().toISOString(),
+      status: 'completed',
+      sources,
+    });
+
+    if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {
+      await this.chatsRepository.patchThread(uid, chatId, {
+        title: buildAutoTitle(content),
+      });
+    }
+
+    return { assistantMessage, sources };
   }
 
   private async requireThread(uid: string, chatId: string): Promise<PersistedChatThread> {
@@ -143,6 +229,17 @@ export function buildAutoTitle(firstUserMessage: string): string {
     return trimmed;
   }
   return `${trimmed.slice(0, CHAT_AUTO_TITLE_MAX_LENGTH - 1)}…`;
+}
+
+function toMessageDto(message: PersistedChatMessage): ChatMessageDto {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    createdAt: message.createdAt,
+    ...(message.status !== undefined ? { status: message.status } : {}),
+    ...(message.sources !== undefined ? { sources: message.sources } : {}),
+  };
 }
 
 function newMessageId(): string {

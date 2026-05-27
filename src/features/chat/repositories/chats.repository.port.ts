@@ -34,4 +34,6 @@ export interface ChatsRepository {
     chatId: string,
     patch: { title?: string },
   ): Promise<void>;
+
+  deleteThread(uid: string, chatId: string): Promise<void>;
 }

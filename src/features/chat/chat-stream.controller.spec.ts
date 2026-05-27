@@ -27,10 +27,12 @@ import { CHATS_REPOSITORY } from './repositories/chats.repository.port';
 import { ChatPrerequisitesService } from './services/chat-prerequisites.service';
 import { ChatRagService } from './services/chat-rag.service';
 import { ChatService } from './services/chat.service';
+import { ChatActiveStreamRegistry } from './services/chat-active-stream.registry';
 import { ChatStreamService } from './services/chat-stream.service';
 
-describe('ChatController stream (CHAT-05)', () => {
+describe('ChatController stream (CHAT-05/06)', () => {
   let controller: ChatController;
+  let activeStreams: ChatActiveStreamRegistry;
   let onboardingRepo: InMemoryOnboardingUsersRepository;
   let documentsRepo: InMemoryDocumentsRepository;
   const uid = 'dev-user-chat-stream-controller';
@@ -56,6 +58,7 @@ describe('ChatController stream (CHAT-05)', () => {
         ChatService,
         ChatStreamService,
         ChatRagService,
+        ChatActiveStreamRegistry,
         ChatPrerequisitesService,
         RetrievalService,
         InMemoryChatsRepository,
@@ -88,6 +91,7 @@ describe('ChatController stream (CHAT-05)', () => {
       .compile();
 
     controller = moduleRef.get(ChatController);
+    activeStreams = moduleRef.get(ChatActiveStreamRegistry);
     documentsRepo = moduleRef.get(InMemoryDocumentsRepository);
     moduleRef.get(PromptLoaderService).onModuleInit();
   });
@@ -167,5 +171,54 @@ describe('ChatController stream (CHAT-05)', () => {
     expect(body).toContain('event: text_delta');
     expect(body).toContain('event: sources');
     expect(body).toContain('event: done');
+  });
+
+  it('POST /messages returns JSON userMessage and assistantMessage', async () => {
+    await finalizeUserWithProfile();
+    const doc = await documentsRepo.create(uid, {
+      title: 'Doc',
+      fileName: 'd.txt',
+      mimeType: 'text/plain',
+      byteSize: 1,
+    });
+    await documentsRepo.updateStatus(uid, doc.id, 'ready');
+    await documentsRepo.setSearchEnabled(uid, doc.id, true);
+
+    const thread = await controller.createThread({ user: { uid } } as never, {});
+    const result = await controller.sendMessage(
+      { user: { uid } } as never,
+      thread.id,
+      { content: 'Via JSON' },
+    );
+
+    expect(result.userMessage.content).toBe('Via JSON');
+    expect(result.assistantMessage.status).toBe('completed');
+  });
+
+  it('DELETE /chats/:id removes thread and messages', async () => {
+    await finalizeUserWithProfile();
+    const thread = await controller.createThread({ user: { uid } } as never, {});
+
+    await controller.deleteThread({ user: { uid } } as never, thread.id);
+
+    await expect(
+      controller.listMessages({ user: { uid } } as never, thread.id, {}),
+    ).rejects.toMatchObject({
+      error: LucyErrorCodes.CHAT_NOT_FOUND,
+    });
+  });
+
+  it('DELETE returns CHAT_STREAM_IN_PROGRESS when stream is active', async () => {
+    await finalizeUserWithProfile();
+    const thread = await controller.createThread({ user: { uid } } as never, {});
+    activeStreams.acquire(uid, thread.id);
+
+    await expect(
+      controller.deleteThread({ user: { uid } } as never, thread.id),
+    ).rejects.toMatchObject({
+      error: LucyErrorCodes.CHAT_STREAM_IN_PROGRESS,
+    });
+
+    activeStreams.release(uid, thread.id);
   });
 });

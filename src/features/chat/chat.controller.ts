@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -20,7 +21,8 @@ import { LucyApiError } from '../../core/errors/lucy-api.error';
 import { parseCreateChatRequest } from './dto/create-chat.dto';
 import { parseListChatMessagesQuery } from './dto/list-chat-messages-query.dto';
 import { parseStreamChatMessageRequest } from './dto/stream-chat-message.dto';
-import { formatChatSsePayload } from './utils/chat-sse';
+import { CHAT_SSE_PING_INTERVAL_MS } from './chat.constants';
+import { formatChatSsePing, formatChatSsePayload } from './utils/chat-sse';
 import { ChatService } from './services/chat.service';
 import { ChatStreamService } from './services/chat-stream.service';
 
@@ -70,15 +72,43 @@ export class ChatController {
     response.setHeader('Connection', 'keep-alive');
     response.flushHeaders?.();
 
-    for await (const event of this.chatStreamService.streamMessage(
-      uid,
-      chatId,
-      input.content,
-    )) {
-      response.write(formatChatSsePayload(event));
+    const pingTimer = setInterval(() => {
+      response.write(formatChatSsePing());
+    }, CHAT_SSE_PING_INTERVAL_MS);
+
+    try {
+      for await (const event of this.chatStreamService.streamMessage(
+        uid,
+        chatId,
+        input.content,
+      )) {
+        response.write(formatChatSsePayload(event));
+      }
+    } finally {
+      clearInterval(pingTimer);
     }
 
     response.end();
+  }
+
+  @Post(':chatId/messages')
+  async sendMessage(
+    @Req() request: FirebaseAuthRequest,
+    @Param('chatId') chatId: string,
+    @Body() body: unknown,
+  ) {
+    const uid = this.requireUid(request);
+    const input = parseStreamChatMessageRequest(body);
+    return this.chatStreamService.sendMessage(uid, chatId, input.content);
+  }
+
+  @Delete(':chatId')
+  async deleteThread(
+    @Req() request: FirebaseAuthRequest,
+    @Param('chatId') chatId: string,
+  ): Promise<void> {
+    const uid = this.requireUid(request);
+    await this.chatService.deleteThread(uid, chatId);
   }
 
   @Get(':chatId/messages')

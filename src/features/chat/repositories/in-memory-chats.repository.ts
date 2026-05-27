@@ -104,6 +104,17 @@ export class InMemoryChatsRepository implements ChatsRepository {
     thread.updatedAt = new Date().toISOString();
   }
 
+  async deleteThread(uid: string, chatId: string): Promise<void> {
+    const threads = this.threadsByUid.get(uid) ?? [];
+    const index = threads.findIndex((thread) => thread.id === chatId);
+    if (index < 0) {
+      throw new Error(`Chat thread not found: ${chatId}`);
+    }
+    threads.splice(index, 1);
+    this.threadsByUid.set(uid, threads);
+    this.messagesByUid.get(uid)?.delete(chatId);
+  }
+
   private findThread(uid: string, chatId: string): PersistedChatThread | undefined {
     return (this.threadsByUid.get(uid) ?? []).find((t) => t.id === chatId);
   }

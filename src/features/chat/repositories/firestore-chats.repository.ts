@@ -153,6 +153,22 @@ export class FirestoreChatsRepository implements ChatsRepository {
     await threadRef.set(updates, { merge: true });
   }
 
+  async deleteThread(uid: string, chatId: string): Promise<void> {
+    const threadRef = this.chatsCollection(uid).doc(chatId);
+    const threadSnap = await threadRef.get();
+    if (!threadSnap.exists) {
+      throw new Error(`Chat thread not found: ${chatId}`);
+    }
+
+    const messagesSnap = await threadRef.collection('messages').get();
+    const batch = admin.firestore().batch();
+    for (const doc of messagesSnap.docs) {
+      batch.delete(doc.ref);
+    }
+    batch.delete(threadRef);
+    await batch.commit();
+  }
+
   private chatsCollection(uid: string): admin.firestore.CollectionReference {
     return admin.firestore().collection('users').doc(uid).collection('chats');
   }

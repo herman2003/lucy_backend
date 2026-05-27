@@ -12,6 +12,7 @@ import { FirestoreChatsRepository } from './repositories/firestore-chats.reposit
 import { InMemoryChatsRepository } from './repositories/in-memory-chats.repository';
 import { CHATS_REPOSITORY } from './repositories/chats.repository.port';
 import { ChatPrerequisitesService } from './services/chat-prerequisites.service';
+import { ChatActiveStreamRegistry } from './services/chat-active-stream.registry';
 import { ChatRagService } from './services/chat-rag.service';
 import { ChatService } from './services/chat.service';
 import { ChatStreamService } from './services/chat-stream.service';
@@ -23,6 +24,7 @@ import { ChatStreamService } from './services/chat-stream.service';
     ChatService,
     ChatStreamService,
     ChatRagService,
+    ChatActiveStreamRegistry,
     ChatPrerequisitesService,
     InMemoryChatsRepository,
     FirestoreChatsRepository,

@@ -16,6 +16,7 @@ import { ChatPrerequisitesService } from './services/chat-prerequisites.service'
 import { InMemoryChatsRepository } from './repositories/in-memory-chats.repository';
 import { CHATS_REPOSITORY } from './repositories/chats.repository.port';
 import { ChatService } from './services/chat.service';
+import { ChatActiveStreamRegistry } from './services/chat-active-stream.registry';
 import { ChatStreamService } from './services/chat-stream.service';
 import { FirebaseAuthGuard } from '../../core/auth/firebase-auth.guard';
 import { FirebaseAuthService } from '../../core/auth/firebase-auth.service';
@@ -53,6 +54,7 @@ describe('ChatPrerequisitesService (CHAT-02)', () => {
           },
         },
         ChatPrerequisitesService,
+        ChatActiveStreamRegistry,
         InMemoryChatsRepository,
         { provide: CHATS_REPOSITORY, useExisting: InMemoryChatsRepository },
         { provide: USERS_PROFILE_REPOSITORY, useValue: new InMemoryUsersProfileRepository(store) },
