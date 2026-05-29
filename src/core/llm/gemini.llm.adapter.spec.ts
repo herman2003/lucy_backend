@@ -1,10 +1,9 @@
 import { LucyErrorCodes } from '../errors/lucy-error-codes';
-import { GeminiLlmStreamingAdapter } from './gemini.llm-streaming.adapter';
-import { collectStreamText } from './mock.llm-streaming.adapter';
+import { GeminiLlmAdapter } from './gemini.llm.adapter';
 
-describe('GeminiLlmStreamingAdapter', () => {
+describe('GeminiLlmAdapter', () => {
   it('throws LLM_UNAVAILABLE when GEMINI_API_KEY is not set', async () => {
-    const adapter = new GeminiLlmStreamingAdapter({
+    const adapter = new GeminiLlmAdapter({
       port: 3001,
       nodeEnv: 'test',
       firebaseProjectId: 'test',
@@ -25,9 +24,11 @@ describe('GeminiLlmStreamingAdapter', () => {
     });
 
     await expect(
-      collectStreamText(
-        adapter.streamText({ systemPrompt: 'sys', userPrompt: 'user' }),
-      ),
+      adapter.generateStructured({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        responseJsonSchema: { type: 'object' },
+      }),
     ).rejects.toMatchObject({
       error: LucyErrorCodes.LLM_UNAVAILABLE,
       statusCode: 503,

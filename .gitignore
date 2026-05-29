@@ -1,0 +1,20 @@
+# Dependencies & build
+node_modules/
+dist/
+coverage/
+
+# Environment & secrets (never commit)
+.env
+.env.*
+!.env.example
+secrets/
+
+# Firebase / Google service account keys
+*-firebase-adminsdk-*.json
+*firebase-adminsdk*.json
+serviceAccount.json
+service-account*.json
+*.pem
+
+# Logs
+.DS_Store
