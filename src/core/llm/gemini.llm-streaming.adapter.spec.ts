@@ -5,7 +5,7 @@ import { collectStreamText } from './mock.llm-streaming.adapter';
 describe('GeminiLlmStreamingAdapter', () => {
   it('throws LLM_UNAVAILABLE when GEMINI_API_KEY is not set', async () => {
     const adapter = new GeminiLlmStreamingAdapter({
-      port: 3000,
+      port: 3001,
       nodeEnv: 'test',
       firebaseProjectId: 'test',
       firebaseStorageBucket: 'test.appspot.com',

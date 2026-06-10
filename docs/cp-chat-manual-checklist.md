@@ -13,7 +13,7 @@ Validation humaine après **CHAT-06** (backend prêt pour Flutter CHAT-07).
 
 ```bash
 curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3000/v1/chats/eligibility
+  http://localhost:3001/v1/chats/eligibility
 ```
 
 Attendu : `{ "canChat": true, "activeDocumentCount": >= 1 }`
@@ -24,7 +24,7 @@ Attendu : `{ "canChat": true, "activeDocumentCount": >= 1 }`
 CHAT_ID=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}' \
-  http://localhost:3000/v1/chats | jq -r '.id')
+  http://localhost:3001/v1/chats | jq -r '.id')
 echo "$CHAT_ID"
 ```
 
@@ -35,7 +35,7 @@ curl -N -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content":"Qu est-ce que l entropie ?"}' \
-  "http://localhost:3000/v1/chats/${CHAT_ID}/messages/stream"
+  "http://localhost:3001/v1/chats/${CHAT_ID}/messages/stream"
 ```
 
 Vérifier la séquence :
@@ -53,7 +53,7 @@ curl -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content":"Autre question"}' \
-  "http://localhost:3000/v1/chats/${CHAT_ID}/messages"
+  "http://localhost:3001/v1/chats/${CHAT_ID}/messages"
 ```
 
 Attendu : `{ "userMessage": {...}, "assistantMessage": { "status": "completed", "sources": [...] } }`
@@ -78,7 +78,7 @@ Attendu : le second reçoit **409** `CHAT_STREAM_IN_PROGRESS` (JSON, pas de flux
 
 ```bash
 curl -i -X DELETE -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:3000/v1/chats/${CHAT_ID}"
+  "http://localhost:3001/v1/chats/${CHAT_ID}"
 ```
 
 Attendu : **204** ou **200** ; `GET .../messages` → **404** `CHAT_NOT_FOUND`.

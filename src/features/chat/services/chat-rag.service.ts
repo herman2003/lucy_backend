@@ -41,7 +41,7 @@ export class ChatRagService {
 
     const excerptsBlock =
       hits.length === 0
-        ? '(No excerpts retrieved — answer from general tutoring guidance only if the question is meta; otherwise state that no relevant excerpt was found.)'
+        ? '(No relevant excerpts — START with an explicit sentence that the question is NOT in the learner uploaded documents; do NOT introduce yourself. Then suggest a document-related reformulation. Do not invent document content.)'
         : hits.map((hit) => hit.contextHeader).join('\n\n');
 
     return [
@@ -78,6 +78,23 @@ export class ChatRagService {
             )
             .join('\n'),
     ].join('\n');
+  }
+
+  /**
+   * Resolves source cards without failing the chat turn when citation LLM errors.
+   */
+  async resolveSourcesSafely(
+    assistantAnswer: string,
+    hits: SearchRetrievalHitDto[],
+  ): Promise<ChatSourceRecord[]> {
+    if (hits.length === 0) {
+      return [];
+    }
+    try {
+      return await this.resolveSources(assistantAnswer, hits);
+    } catch {
+      return [];
+    }
   }
 
   async resolveSources(
