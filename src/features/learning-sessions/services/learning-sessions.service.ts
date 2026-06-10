@@ -52,6 +52,11 @@ export class LearningSessionsService {
     return session;
   }
 
+  async list(uid: string): Promise<PersistedLearningSession[]> {
+    const sessions = await this.sessionsRepository.list(uid);
+    return sessions.filter((session) => session.status === 'ready');
+  }
+
   async generate(uid: string, body: unknown): Promise<PersistedLearningSession> {
     const input = parseGenerateLearningSessionRequest(body);
     if (input.type !== 'quiz') {

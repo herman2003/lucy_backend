@@ -294,4 +294,15 @@ describe('LearningSessionsService getById (LEARN-01c)', () => {
       error: LucyErrorCodes.LEARNING_SESSION_NOT_FOUND,
     });
   });
+
+  it('lists ready sessions newest first without corpus guard', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+
+    const created = await service.generate(uid, { type: 'quiz' });
+    const list = await service.list(uid);
+
+    expect(list).toHaveLength(1);
+    expect(list[0]?.id).toBe(created.id);
+  });
 });

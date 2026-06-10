@@ -16,7 +16,7 @@ import {
 } from '../../core/auth/firebase-auth.guard';
 import { LucyErrorCodes } from '../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../core/errors/lucy-api.error';
-import { buildLearningSessionResponse } from './dto/learning-session-response.dto';
+import { buildLearningSessionListItem, buildLearningSessionResponse } from './dto/learning-session-response.dto';
 import { LearningSessionsService } from './services/learning-sessions.service';
 
 @Controller('learning-sessions')
@@ -34,6 +34,13 @@ export class LearningSessionsController {
     const session = await this.learningSessionsService.generate(uid, body);
     response.status(201);
     return buildLearningSessionResponse(session);
+  }
+
+  @Get()
+  async list(@Req() request: FirebaseAuthRequest) {
+    const uid = this.requireUid(request);
+    const sessions = await this.learningSessionsService.list(uid);
+    return sessions.map(buildLearningSessionListItem);
   }
 
   @Get(':sessionId')
