@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 
 import { InMemoryUsersStore } from '../../../core/persistence/in-memory-users.store';
+import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
 import type {
+  UpdateUserProfilePatch,
   UpsertUserProfileInput,
   UpsertUserProfileResult,
   UsersProfileRepository,
@@ -50,6 +52,29 @@ export class InMemoryUsersProfileRepository implements UsersProfileRepository {
     }
 
     return { created: true, profile: { ...doc } };
+  }
+
+  async updateLearnerProfile(
+    uid: string,
+    learnerProfile: LearnerProfile,
+  ): Promise<Record<string, unknown>> {
+    const doc = this.store.getOrCreate(uid);
+    doc.learnerProfile = learnerProfile;
+    return { ...doc };
+  }
+
+  async updateProfile(
+    uid: string,
+    patch: UpdateUserProfilePatch,
+  ): Promise<Record<string, unknown>> {
+    const doc = this.store.getOrCreate(uid);
+    if (patch.fullName !== undefined) {
+      doc.fullName = patch.fullName;
+    }
+    if (patch.uiLocale !== undefined) {
+      doc.uiLocale = patch.uiLocale;
+    }
+    return { ...doc };
   }
 
   private assertNoEmailConflict(

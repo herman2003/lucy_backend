@@ -6,6 +6,7 @@ import { EMBEDDING_PORT } from '../../../core/llm/embedding.tokens';
 import { FakeEmbeddingAdapter } from '../../../core/llm/fake.embedding.adapter';
 import { LlmModule } from '../../../core/llm/llm.module';
 import { MOCK_STREAM_DELTAS, MOCK_STREAM_FULL_TEXT } from '../../../core/llm/mock.llm-streaming.adapter';
+import { buildOffCorpusAssistantReply } from '../utils/chat-off-corpus-reply';
 import { PromptLoaderService } from '../../../core/prompt/prompt-loader.service';
 import { PromptModule } from '../../../core/prompt/prompt.module';
 import { InMemoryUsersStore } from '../../../core/persistence/in-memory-users.store';
@@ -196,7 +197,7 @@ describe('ChatStreamService (CHAT-05)', () => {
     expect(result.userMessage.role).toBe('user');
     expect(result.assistantMessage.role).toBe('assistant');
     expect(result.assistantMessage.status).toBe('completed');
-    expect(result.assistantMessage.content).toBe(MOCK_STREAM_FULL_TEXT);
+    expect(result.assistantMessage.content).toBe(buildOffCorpusAssistantReply('fr'));
   });
 
   it('assertCanStream throws CHAT_STREAM_IN_PROGRESS when a stream is active', async () => {
@@ -226,5 +227,11 @@ describe('ChatStreamService (CHAT-05)', () => {
 
     const doneEvent = events.find((event) => event.event === 'done');
     expect(doneEvent?.data.assistantMessage.sources).toEqual([]);
+    expect(doneEvent?.data.assistantMessage.content).toBe(
+      buildOffCorpusAssistantReply('fr'),
+    );
+    expect(doneEvent?.data.assistantMessage.content).toContain(
+      'ne figure pas dans vos documents',
+    );
   });
 });

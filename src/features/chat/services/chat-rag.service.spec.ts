@@ -39,6 +39,54 @@ describe('ChatRagService (CHAT-05)', () => {
     expect(system).toContain('Quiz');
   });
 
+  it('resolveSourcesSafely returns empty array without calling LLM when hits are empty', async () => {
+    const llm = { generateStructured: jest.fn() };
+    const moduleRef = await Test.createTestingModule({
+      imports: [PromptModule],
+      providers: [
+        ChatRagService,
+        { provide: LLM_PORT, useValue: llm },
+      ],
+    }).compile();
+    const service = moduleRef.get(ChatRagService);
+    moduleRef.get(PromptLoaderService).onModuleInit();
+
+    const sources = await service.resolveSourcesSafely('Réponse', []);
+
+    expect(sources).toEqual([]);
+    expect(llm.generateStructured).not.toHaveBeenCalled();
+  });
+
+  it('resolveSourcesSafely returns empty array when citation LLM fails', async () => {
+    const llm = {
+      generateStructured: jest.fn().mockRejectedValue(new Error('citation failed')),
+    };
+    const moduleRef = await Test.createTestingModule({
+      imports: [PromptModule],
+      providers: [
+        ChatRagService,
+        { provide: LLM_PORT, useValue: llm },
+      ],
+    }).compile();
+    const service = moduleRef.get(ChatRagService);
+    moduleRef.get(PromptLoaderService).onModuleInit();
+
+    const hits: SearchRetrievalHitDto[] = [
+      {
+        documentId: 'doc_1',
+        title: 'Cours',
+        chunkId: 'chunk_a',
+        text: 'Texte',
+        score: 0.9,
+        contextHeader: 'header',
+      },
+    ];
+
+    const sources = await service.resolveSourcesSafely('Réponse', hits);
+
+    expect(sources).toEqual([]);
+  });
+
   it('resolveSources maps mock citedChunkIds to source records', async () => {
     const hits: SearchRetrievalHitDto[] = [
       {

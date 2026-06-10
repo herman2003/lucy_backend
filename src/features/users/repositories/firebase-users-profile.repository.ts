@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 
+import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
 import type {
+  UpdateUserProfilePatch,
   UpsertUserProfileInput,
   UpsertUserProfileResult,
   UsersProfileRepository,
@@ -53,6 +55,33 @@ export class FirebaseUsersProfileRepository implements UsersProfileRepository {
 
     await ref.set(profile, { merge: true });
     return { created: true, profile };
+  }
+
+  async updateLearnerProfile(
+    uid: string,
+    learnerProfile: LearnerProfile,
+  ): Promise<Record<string, unknown>> {
+    const ref = admin.firestore().collection('users').doc(uid);
+    await ref.set({ learnerProfile }, { merge: true });
+    const snapshot = await ref.get();
+    return snapshot.data() ?? {};
+  }
+
+  async updateProfile(
+    uid: string,
+    patch: UpdateUserProfilePatch,
+  ): Promise<Record<string, unknown>> {
+    const ref = admin.firestore().collection('users').doc(uid);
+    const data: Record<string, unknown> = {};
+    if (patch.fullName !== undefined) {
+      data.fullName = patch.fullName;
+    }
+    if (patch.uiLocale !== undefined) {
+      data.uiLocale = patch.uiLocale;
+    }
+    await ref.set(data, { merge: true });
+    const snapshot = await ref.get();
+    return snapshot.data() ?? {};
   }
 
   private assertNoEmailConflict(

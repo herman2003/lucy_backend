@@ -10,6 +10,11 @@ import {
   CHAT_AUTO_TITLE_MAX_LENGTH,
   CHAT_RETRIEVAL_LIMIT,
 } from '../chat.constants';
+import { buildOffCorpusAssistantReply } from '../utils/chat-off-corpus-reply';
+import {
+  filterRetrievalHitsForChat,
+  isOffCorpusForChat,
+} from '../utils/chat-retrieval-filter';
 import { DEFAULT_CHAT_TITLE } from '../dto/create-chat.dto';
 import type { SendChatMessageResponseDto } from '../dto/send-chat-message-response.dto';
 import type { ChatSseEvent } from '../domain/chat-sse.types';
@@ -180,21 +185,29 @@ export class ChatStreamService {
     turn: TurnContext,
     options: CompleteTurnOptions = {},
   ): Promise<CompleteTurnResult> {
-    const hits = await this.retrievalService.search(uid, {
+    const rawHits = await this.retrievalService.search(uid, {
       query: content,
       limit: CHAT_RETRIEVAL_LIMIT,
     });
-
-    const systemPrompt = this.chatRag.buildSystemPrompt(turn.learnerProfile);
-    const userPrompt = this.chatRag.buildUserPrompt(turn.historyBefore, content, hits);
+    const hits = filterRetrievalHitsForChat(rawHits);
 
     let assistantText = '';
-    for await (const delta of this.llmStreaming.streamText({ systemPrompt, userPrompt })) {
-      assistantText += delta;
-      options.onTextDelta?.(delta);
-    }
+    let sources: ChatSourceRecord[] = [];
 
-    const sources = await this.chatRag.resolveSources(assistantText, hits);
+    if (isOffCorpusForChat(hits)) {
+      assistantText = buildOffCorpusAssistantReply(turn.learnerProfile.tutoring_language);
+      options.onTextDelta?.(assistantText);
+    } else {
+      const systemPrompt = this.chatRag.buildSystemPrompt(turn.learnerProfile);
+      const userPrompt = this.chatRag.buildUserPrompt(turn.historyBefore, content, hits);
+
+      for await (const delta of this.llmStreaming.streamText({ systemPrompt, userPrompt })) {
+        assistantText += delta;
+        options.onTextDelta?.(delta);
+      }
+
+      sources = await this.chatRag.resolveSourcesSafely(assistantText, hits);
+    }
 
     const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
       id: newMessageId(),

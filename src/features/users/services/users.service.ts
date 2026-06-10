@@ -3,6 +3,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
 import { parseCreateUserProfileRequest } from '../dto/create-user-profile.dto';
+import { parseUpdateLearnerProfileRequest } from '../dto/update-learner-profile.dto';
+import { parseUpdateUserProfileRequest } from '../dto/update-user-profile.dto';
 import {
   buildUserProfileResponse,
   type UserProfileResponseDto,
@@ -48,5 +50,48 @@ export class UsersService {
       }
       throw error;
     }
+  }
+
+  async updateMe(uid: string, body: unknown): Promise<UserProfileResponseDto> {
+    const patch = parseUpdateUserProfileRequest(body);
+    const existing = await this.usersRepository.getProfile(uid);
+    if (!existing || typeof existing.fullName !== 'string' || !existing.fullName) {
+      throw new LucyApiError(
+        404,
+        LucyErrorCodes.VALIDATION_ERROR,
+        'User profile not found',
+      );
+    }
+
+    const updated = await this.usersRepository.updateProfile(uid, patch);
+    return buildUserProfileResponse(uid, updated);
+  }
+
+  async updateLearnerProfile(
+    uid: string,
+    body: unknown,
+  ): Promise<UserProfileResponseDto> {
+    const learnerProfile = parseUpdateLearnerProfileRequest(body);
+    const existing = await this.usersRepository.getProfile(uid);
+    if (!existing || typeof existing.fullName !== 'string' || !existing.fullName) {
+      throw new LucyApiError(
+        404,
+        LucyErrorCodes.VALIDATION_ERROR,
+        'User profile not found',
+      );
+    }
+    if (existing.learnerProfile === undefined || existing.learnerProfile === null) {
+      throw new LucyApiError(
+        400,
+        LucyErrorCodes.ONBOARDING_PROFILE_INCOMPLETE,
+        'Learner profile is missing',
+      );
+    }
+
+    const updated = await this.usersRepository.updateLearnerProfile(
+      uid,
+      learnerProfile,
+    );
+    return buildUserProfileResponse(uid, updated);
   }
 }

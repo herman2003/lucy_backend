@@ -84,4 +84,75 @@ describe('UsersService', () => {
       error: LucyErrorCodes.VALIDATION_ERROR,
     });
   });
+
+  it('updateMe patches fullName and uiLocale', async () => {
+    await service.createMe(uid, {
+      fullName: 'Jane Doe',
+      email: 'jane@example.com',
+      uiLocale: 'fr',
+    });
+
+    const profile = await service.updateMe(uid, {
+      fullName: 'Jane Updated',
+      uiLocale: 'en',
+    });
+
+    expect(profile.fullName).toBe('Jane Updated');
+    expect(profile.uiLocale).toBe('en');
+  });
+
+  it('updateLearnerProfile persists learner profile', async () => {
+    await service.createMe(uid, {
+      fullName: 'Jane Doe',
+      email: 'jane@example.com',
+    });
+    const doc = store.getOrCreate(uid);
+    doc.learnerProfile = {
+      primary_role: 'student',
+      main_domains: ['sciences'],
+      learning_goal: 'exam',
+      self_assessed_level: 'intermediate',
+      explanation_style: 'step_by_step',
+      feedback_tone: 'encouraging',
+      tutoring_language: 'de',
+    };
+
+    const profile = await service.updateLearnerProfile(uid, {
+      primary_role: 'professional',
+      main_domains: ['business', 'cs'],
+      learning_goal: 'professional',
+      self_assessed_level: 'advanced',
+      explanation_style: 'summary_first',
+      feedback_tone: 'neutral',
+      tutoring_language: 'en',
+    });
+
+    expect(profile.learnerProfile).toMatchObject({
+      primary_role: 'professional',
+      main_domains: ['business', 'cs'],
+      tutoring_language: 'en',
+    });
+  });
+
+  it('updateLearnerProfile rejects when learner profile missing', async () => {
+    await service.createMe(uid, {
+      fullName: 'Jane Doe',
+      email: 'jane@example.com',
+    });
+
+    await expect(
+      service.updateLearnerProfile(uid, {
+        primary_role: 'student',
+        main_domains: ['sciences'],
+        learning_goal: 'exam',
+        self_assessed_level: 'intermediate',
+        explanation_style: 'step_by_step',
+        feedback_tone: 'encouraging',
+        tutoring_language: 'de',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      error: LucyErrorCodes.ONBOARDING_PROFILE_INCOMPLETE,
+    });
+  });
 });

@@ -1,3 +1,6 @@
+import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
+import { parseLearnerProfile } from '../../onboarding/validators/analyze-response.validator';
+
 export type UserProfileResponseDto = {
   uid: string;
   fullName: string;
@@ -6,6 +9,7 @@ export type UserProfileResponseDto = {
   isConfigured: boolean;
   onboardingStatus: string;
   uiLocale?: string;
+  learnerProfile?: LearnerProfile;
 };
 
 export const DEFAULT_ONBOARDING_STATUS = 'not_started';
@@ -26,6 +30,7 @@ export function buildUserProfileResponse(
       : DEFAULT_ONBOARDING_STATUS;
   const uiLocale =
     typeof data.uiLocale === 'string' ? data.uiLocale : undefined;
+  const learnerProfile = tryParseStoredLearnerProfile(data.learnerProfile);
 
   return {
     uid,
@@ -35,5 +40,17 @@ export function buildUserProfileResponse(
     isConfigured: data.isConfigured === true,
     onboardingStatus,
     ...(uiLocale !== undefined ? { uiLocale } : {}),
+    ...(learnerProfile !== undefined ? { learnerProfile } : {}),
   };
+}
+
+function tryParseStoredLearnerProfile(value: unknown): LearnerProfile | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  try {
+    return parseLearnerProfile(value);
+  } catch {
+    return undefined;
+  }
 }

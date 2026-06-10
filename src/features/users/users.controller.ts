@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   Post,
   Req,
   Res,
@@ -24,6 +25,21 @@ export class UsersController {
   getMe(@Req() request: FirebaseAuthRequest) {
     const uid = this.requireUid(request);
     return this.usersService.getMe(uid);
+  }
+
+  @Patch('me')
+  updateMe(@Req() request: FirebaseAuthRequest, @Body() body: unknown) {
+    const uid = this.requireUid(request);
+    return this.usersService.updateMe(uid, body);
+  }
+
+  @Patch('me/learner-profile')
+  updateLearnerProfile(
+    @Req() request: FirebaseAuthRequest,
+    @Body() body: unknown,
+  ) {
+    const uid = this.requireUid(request);
+    return this.usersService.updateLearnerProfile(uid, body);
   }
 
   @Post('me')
