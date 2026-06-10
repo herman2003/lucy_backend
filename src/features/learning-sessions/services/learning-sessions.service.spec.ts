@@ -335,4 +335,38 @@ describe('LearningSessionsService getById (LEARN-01c)', () => {
     expect(list[1]?.id).toBe(quizSession.id);
     expect(list.map((session) => session.type)).toEqual(['flashcards', 'quiz']);
   });
+
+  it('deletes an owned session and returns not found afterwards', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+
+    const created = await service.generate(uid, { type: 'quiz' });
+    await service.delete(uid, created.id);
+
+    await expect(service.getById(uid, created.id)).rejects.toMatchObject({
+      statusCode: 404,
+      error: LucyErrorCodes.LEARNING_SESSION_NOT_FOUND,
+    });
+    expect(await service.list(uid)).toEqual([]);
+  });
+
+  it('throws LEARNING_SESSION_NOT_FOUND when deleting unknown session', async () => {
+    await expect(service.delete(uid, 'learn_missing')).rejects.toMatchObject({
+      statusCode: 404,
+      error: LucyErrorCodes.LEARNING_SESSION_NOT_FOUND,
+    });
+  });
+
+  it('does not delete sessions owned by another user', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+
+    const created = await service.generate(uid, { type: 'quiz' });
+
+    await expect(service.delete('other-user', created.id)).rejects.toMatchObject({
+      statusCode: 404,
+      error: LucyErrorCodes.LEARNING_SESSION_NOT_FOUND,
+    });
+    expect(await service.getById(uid, created.id)).toEqual(created);
+  });
 });

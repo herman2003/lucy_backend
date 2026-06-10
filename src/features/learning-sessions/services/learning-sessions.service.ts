@@ -64,6 +64,18 @@ export class LearningSessionsService {
     return sessions.filter((session) => session.status === 'ready');
   }
 
+  async delete(uid: string, sessionId: string): Promise<void> {
+    const session = await this.sessionsRepository.getById(uid, sessionId);
+    if (!session) {
+      throw new LucyApiError(
+        404,
+        LucyErrorCodes.LEARNING_SESSION_NOT_FOUND,
+        'Learning session not found',
+      );
+    }
+    await this.sessionsRepository.delete(uid, sessionId);
+  }
+
   async generate(uid: string, body: unknown): Promise<PersistedLearningSession> {
     const input = parseGenerateLearningSessionRequest(body);
 

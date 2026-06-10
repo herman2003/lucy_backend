@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Req,
@@ -51,6 +54,16 @@ export class LearningSessionsController {
     const uid = this.requireUid(request);
     const session = await this.learningSessionsService.getById(uid, sessionId);
     return buildLearningSessionResponse(session);
+  }
+
+  @Delete(':sessionId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(
+    @Req() request: FirebaseAuthRequest,
+    @Param('sessionId') sessionId: string,
+  ): Promise<void> {
+    const uid = this.requireUid(request);
+    await this.learningSessionsService.delete(uid, sessionId);
   }
 
   private requireUid(request: FirebaseAuthRequest): string {
