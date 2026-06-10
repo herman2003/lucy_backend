@@ -23,6 +23,7 @@ export class PromptLoaderService implements OnModuleInit {
   private analyzeSystem = '';
   private analyzeUserTemplate = '';
   private chatTutorSystemTemplate = '';
+  private quizGeneratorSystemTemplate = '';
 
   onModuleInit(): void {
     const promptsRoot = this.resolvePromptsRoot();
@@ -46,6 +47,22 @@ export class PromptLoaderService implements OnModuleInit {
       join(promptsRoot, 'chat-tutor.system.hbs'),
       'utf8',
     );
+    this.quizGeneratorSystemTemplate = readFileSync(
+      join(promptsRoot, 'quiz-generator.system.hbs'),
+      'utf8',
+    );
+  }
+
+  getQuizGeneratorSystemPrompt(
+    learnerProfile: LearnerProfile,
+    itemCount: number,
+  ): string {
+    return renderHandlebarsTemplate(this.quizGeneratorSystemTemplate, {
+      itemCount: String(itemCount),
+      tutoring_language: learnerProfile.tutoring_language,
+      explanation_style: learnerProfile.explanation_style,
+      feedback_tone: learnerProfile.feedback_tone,
+    });
   }
 
   getChatTutorSystemPrompt(learnerProfile: LearnerProfile): string {

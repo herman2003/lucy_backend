@@ -31,7 +31,37 @@ export class MockLlmAdapter implements LlmPort {
     if (this.isChatCitationRequest(input)) {
       return this.buildChatCitationResponse(input.userPrompt);
     }
+    if (this.isQuizGenerationRequest(input)) {
+      return this.buildQuizGenerationResponse(input.userPrompt);
+    }
     return this.buildValidateResponse(input.userPrompt);
+  }
+
+  private isQuizGenerationRequest(input: LlmStructuredRequest): boolean {
+    const schema = input.responseJsonSchema as { required?: string[] };
+    return schema.required?.includes('items') ?? false;
+  }
+
+  private buildQuizGenerationResponse(
+    userPrompt: string,
+  ): LlmStructuredResponse {
+    const itemCountMatch = userPrompt.match(/ITEM_COUNT=(\d+)/);
+    const itemCount = itemCountMatch
+      ? Number.parseInt(itemCountMatch[1]!, 10)
+      : 5;
+    const chunkIds = extractJsonArrayAfterMarker(userPrompt, 'AVAILABLE_CHUNK_IDS=');
+    const chunkId = chunkIds[0] ?? 'chunk_mock_1';
+
+    const items = Array.from({ length: itemCount }, (_, index) => ({
+      question: `Question mock ${index + 1} ?`,
+      choices: ['A', 'B', 'C', 'D'],
+      correctIndex: 0,
+      explanation: 'Explication mock.',
+      sourceChunkIds: [chunkId],
+    }));
+
+    const payload = { items };
+    return { rawText: JSON.stringify(payload), parsedJson: payload };
   }
 
   private isChatCitationRequest(input: LlmStructuredRequest): boolean {
@@ -40,24 +70,10 @@ export class MockLlmAdapter implements LlmPort {
   }
 
   private buildChatCitationResponse(userPrompt: string): LlmStructuredResponse {
-    const marker = 'AVAILABLE_CHUNK_IDS_JSON=';
-    const markerIndex = userPrompt.indexOf(marker);
-    let chunkIds: string[] = [];
-    if (markerIndex >= 0) {
-      const jsonStart = markerIndex + marker.length;
-      const jsonEnd = userPrompt.indexOf('\n', jsonStart);
-      const jsonText =
-        jsonEnd >= 0 ? userPrompt.slice(jsonStart, jsonEnd) : userPrompt.slice(jsonStart);
-      try {
-        const parsed = JSON.parse(jsonText) as unknown;
-        if (Array.isArray(parsed)) {
-          chunkIds = parsed.filter((id): id is string => typeof id === 'string');
-        }
-      } catch {
-        chunkIds = [];
-      }
-    }
-
+    const chunkIds = extractJsonArrayAfterMarker(
+      userPrompt,
+      'AVAILABLE_CHUNK_IDS_JSON=',
+    );
     const citedChunkIds = chunkIds.length > 0 ? [chunkIds[0]!] : [];
     const payload = { citedChunkIds };
     return { rawText: JSON.stringify(payload), parsedJson: payload };
@@ -132,6 +148,29 @@ export class MockLlmAdapter implements LlmPort {
     };
     return { rawText: JSON.stringify(payload), parsedJson: payload };
   }
+}
+
+function extractJsonArrayAfterMarker(
+  userPrompt: string,
+  marker: string,
+): string[] {
+  const markerIndex = userPrompt.indexOf(marker);
+  if (markerIndex < 0) {
+    return [];
+  }
+  const jsonStart = markerIndex + marker.length;
+  const jsonEnd = userPrompt.indexOf('\n', jsonStart);
+  const jsonText =
+    jsonEnd >= 0 ? userPrompt.slice(jsonStart, jsonEnd) : userPrompt.slice(jsonStart);
+  try {
+    const parsed = JSON.parse(jsonText) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((id): id is string => typeof id === 'string');
+    }
+  } catch {
+    return [];
+  }
+  return [];
 }
 
 function extractLearnerAnswer(userPrompt: string): string {
