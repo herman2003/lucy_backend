@@ -317,4 +317,22 @@ describe('LearningSessionsService getById (LEARN-01c)', () => {
     expect(list).toHaveLength(1);
     expect(list[0]?.id).toBe(created.id);
   });
+
+  it('lists two generated sessions newest first', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+
+    const quizSession = await service.generate(uid, { type: 'quiz' });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const flashcardsSession = await service.generate(uid, {
+      type: 'flashcards',
+    });
+
+    const list = await service.list(uid);
+
+    expect(list).toHaveLength(2);
+    expect(list[0]?.id).toBe(flashcardsSession.id);
+    expect(list[1]?.id).toBe(quizSession.id);
+    expect(list.map((session) => session.type)).toEqual(['flashcards', 'quiz']);
+  });
 });
