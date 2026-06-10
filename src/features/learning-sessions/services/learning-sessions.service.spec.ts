@@ -157,16 +157,28 @@ describe('LearningSessionsService (LEARN-01b)', () => {
     });
   });
 
-  it('rejects flashcards generation in LEARN-01b', async () => {
+  it('generates a ready flashcards session with 10 default items', async () => {
     await finalizeUserWithProfile();
     await seedReadyActiveDocumentWithChunk();
 
-    await expect(
-      service.generate(uid, { type: 'flashcards', itemCount: 10 }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      error: LucyErrorCodes.LEARNING_VALIDATION_ERROR,
+    const session = await service.generate(uid, { type: 'flashcards' });
+
+    expect(session.type).toBe('flashcards');
+    expect(session.status).toBe('ready');
+    expect(session.itemCount).toBe(10);
+    expect(session.items).toHaveLength(10);
+    expect(session.items[0]).toMatchObject({
+      id: 'item-1',
+      front: 'Carte mock 1',
+      back: 'Réponse mock 1',
+      sources: [
+        expect.objectContaining({
+          chunkId: 'chunk_test_1',
+          documentId: expect.any(String),
+        }),
+      ],
     });
+    expect(session.title).toContain('Cartes ·');
   });
 });
 

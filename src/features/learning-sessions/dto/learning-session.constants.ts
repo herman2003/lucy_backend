@@ -15,6 +15,13 @@ export function quizRetrievalLimit(itemCount: number): number {
   return Math.min(Math.max(itemCount * 4, 5), 20);
 }
 
+export const FLASHCARDS_RETRIEVAL_QUERY =
+  'Key terms, definitions, and concepts suitable for flashcard memorization';
+
+export function flashcardsRetrievalLimit(itemCount: number): number {
+  return Math.min(Math.max(itemCount * 3, 8), 25);
+}
+
 export const QUIZ_GENERATION_JSON_SCHEMA = {
   type: 'object',
   required: ['items'],
@@ -40,6 +47,29 @@ export const QUIZ_GENERATION_JSON_SCHEMA = {
           },
           correctIndex: { type: 'integer' },
           explanation: { type: 'string' },
+          sourceChunkIds: {
+            type: 'array',
+            items: { type: 'string' },
+            minItems: 1,
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+export const FLASHCARDS_GENERATION_JSON_SCHEMA = {
+  type: 'object',
+  required: ['items'],
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['front', 'back', 'sourceChunkIds'],
+        properties: {
+          front: { type: 'string' },
+          back: { type: 'string' },
           sourceChunkIds: {
             type: 'array',
             items: { type: 'string' },

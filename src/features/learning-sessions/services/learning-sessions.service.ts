@@ -12,21 +12,28 @@ import { ChatPrerequisitesService } from '../../chat/services/chat-prerequisites
 import type { GenerateLearningSessionInput } from '../dto/generate-learning-session.dto';
 import { parseGenerateLearningSessionRequest } from '../dto/generate-learning-session.dto';
 import {
+  FLASHCARDS_GENERATION_JSON_SCHEMA,
+  FLASHCARDS_RETRIEVAL_QUERY,
   QUIZ_GENERATION_JSON_SCHEMA,
   QUIZ_RETRIEVAL_QUERY,
+  flashcardsRetrievalLimit,
   quizRetrievalLimit,
 } from '../dto/learning-session.constants';
 import type {
+  LearningSessionFlashcardItem,
   LearningSessionQuizItem,
+  LearningSessionType,
   PersistedLearningSession,
 } from '../domain/learning-session.types';
 import {
   LEARNING_SESSIONS_REPOSITORY,
   type LearningSessionsRepository,
 } from '../repositories/learning-sessions.repository.port';
+import { parseGeneratedFlashcardItems } from '../validators/generated-flashcards.validator';
 import { parseGeneratedQuizItems } from '../validators/generated-quiz.validator';
 
 const QUIZ_GENERATION_USER_MARKER = 'GENERATE_QUIZ_ITEMS=true';
+const FLASHCARDS_GENERATION_USER_MARKER = 'GENERATE_FLASHCARD_ITEMS=true';
 
 @Injectable()
 export class LearningSessionsService {
@@ -59,42 +66,34 @@ export class LearningSessionsService {
 
   async generate(uid: string, body: unknown): Promise<PersistedLearningSession> {
     const input = parseGenerateLearningSessionRequest(body);
-    if (input.type !== 'quiz') {
-      throw new LucyApiError(
-        400,
-        LucyErrorCodes.LEARNING_VALIDATION_ERROR,
-        'Only quiz generation is supported in this release',
-      );
-    }
 
     await this.assertActiveDocuments(uid);
     const learnerProfile = await this.requireLearnerProfile(uid);
     const eligibility = await this.chatPrerequisites.getEligibility(uid);
 
     const hits = await this.retrievalService.search(uid, {
-      query: QUIZ_RETRIEVAL_QUERY,
-      limit: quizRetrievalLimit(input.itemCount),
+      query: retrievalQueryForType(input.type),
+      limit: retrievalLimitForType(input.type, input.itemCount),
     });
     if (hits.length === 0) {
       throw new LucyApiError(
         502,
         LucyErrorCodes.LEARNING_GENERATION_FAILED,
-        'No retrieval hits available for quiz generation',
+        'No retrieval hits available for learning session generation',
       );
     }
 
-    const items = await this.generateQuizItems(
-      learnerProfile,
-      hits,
-      input.itemCount,
-    );
+    const items =
+      input.type === 'quiz'
+        ? await this.generateQuizItems(learnerProfile, hits, input.itemCount)
+        : await this.generateFlashcardItems(learnerProfile, hits, input.itemCount);
     const now = new Date().toISOString();
 
     return this.sessionsRepository.create(uid, {
-      type: 'quiz',
+      type: input.type,
       status: 'ready',
       itemCount: items.length,
-      title: buildQuizTitle(now),
+      title: buildSessionTitle(input.type, now),
       createdAt: now,
       updatedAt: now,
       activeDocumentCount: eligibility.activeDocumentCount,
@@ -131,6 +130,41 @@ export class LearningSessionsService {
       itemCount,
     );
     const userPrompt = buildQuizUserPrompt(hits, itemCount);
+    return this.generateItemsWithRetry(
+      systemPrompt,
+      userPrompt,
+      QUIZ_GENERATION_JSON_SCHEMA,
+      (parsed) => parseGeneratedQuizItems(parsed, hits, itemCount),
+      'Quiz generation failed',
+    );
+  }
+
+  private async generateFlashcardItems(
+    learnerProfile: LearnerProfile,
+    hits: SearchRetrievalHitDto[],
+    itemCount: number,
+  ): Promise<LearningSessionFlashcardItem[]> {
+    const systemPrompt = this.prompts.getFlashcardsGeneratorSystemPrompt(
+      learnerProfile,
+      itemCount,
+    );
+    const userPrompt = buildFlashcardsUserPrompt(hits, itemCount);
+    return this.generateItemsWithRetry(
+      systemPrompt,
+      userPrompt,
+      FLASHCARDS_GENERATION_JSON_SCHEMA,
+      (parsed) => parseGeneratedFlashcardItems(parsed, hits, itemCount),
+      'Flashcards generation failed',
+    );
+  }
+
+  private async generateItemsWithRetry<T>(
+    systemPrompt: string,
+    userPrompt: string,
+    responseJsonSchema: object,
+    parseItems: (parsed: unknown) => T[],
+    failureMessage: string,
+  ): Promise<T[]> {
     let lastError: unknown;
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -138,12 +172,12 @@ export class LearningSessionsService {
         const response = await this.llmPort.generateStructured({
           systemPrompt,
           userPrompt,
-          responseJsonSchema: QUIZ_GENERATION_JSON_SCHEMA,
+          responseJsonSchema,
         });
         const parsed =
           response.parsedJson ??
           (response.rawText ? JSON.parse(response.rawText) : undefined);
-        return parseGeneratedQuizItems(parsed, hits, itemCount);
+        return parseItems(parsed);
       } catch (error) {
         lastError = error;
       }
@@ -155,12 +189,46 @@ export class LearningSessionsService {
     throw new LucyApiError(
       502,
       LucyErrorCodes.LEARNING_GENERATION_FAILED,
-      'Quiz generation failed',
+      failureMessage,
     );
   }
 }
 
+function retrievalQueryForType(type: LearningSessionType): string {
+  return type === 'quiz' ? QUIZ_RETRIEVAL_QUERY : FLASHCARDS_RETRIEVAL_QUERY;
+}
+
+function retrievalLimitForType(type: LearningSessionType, itemCount: number): number {
+  return type === 'quiz'
+    ? quizRetrievalLimit(itemCount)
+    : flashcardsRetrievalLimit(itemCount);
+}
+
+function buildSessionTitle(type: LearningSessionType, isoTimestamp: string): string {
+  const date = isoTimestamp.slice(0, 10);
+  return type === 'quiz' ? `Quiz · ${date}` : `Cartes · ${date}`;
+}
+
 function buildQuizUserPrompt(
+  hits: SearchRetrievalHitDto[],
+  itemCount: number,
+): string {
+  return buildGenerationUserPrompt(QUIZ_GENERATION_USER_MARKER, hits, itemCount);
+}
+
+function buildFlashcardsUserPrompt(
+  hits: SearchRetrievalHitDto[],
+  itemCount: number,
+): string {
+  return buildGenerationUserPrompt(
+    FLASHCARDS_GENERATION_USER_MARKER,
+    hits,
+    itemCount,
+  );
+}
+
+function buildGenerationUserPrompt(
+  marker: string,
   hits: SearchRetrievalHitDto[],
   itemCount: number,
 ): string {
@@ -168,17 +236,13 @@ function buildQuizUserPrompt(
   const excerpts = hits.map((hit) => hit.contextHeader).join('\n\n');
 
   return [
-    QUIZ_GENERATION_USER_MARKER,
+    marker,
     `ITEM_COUNT=${itemCount}`,
     `AVAILABLE_CHUNK_IDS=${JSON.stringify(chunkIds)}`,
     '',
     '## Excerpts',
     excerpts,
   ].join('\n');
-}
-
-function buildQuizTitle(isoTimestamp: string): string {
-  return `Quiz · ${isoTimestamp.slice(0, 10)}`;
 }
 
 function mapChatPrerequisiteError(error: unknown): never {

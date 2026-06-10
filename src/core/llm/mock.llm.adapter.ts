@@ -31,15 +31,41 @@ export class MockLlmAdapter implements LlmPort {
     if (this.isChatCitationRequest(input)) {
       return this.buildChatCitationResponse(input.userPrompt);
     }
+    if (this.isFlashcardsGenerationRequest(input)) {
+      return this.buildFlashcardsGenerationResponse(input.userPrompt);
+    }
     if (this.isQuizGenerationRequest(input)) {
       return this.buildQuizGenerationResponse(input.userPrompt);
     }
     return this.buildValidateResponse(input.userPrompt);
   }
 
+  private isFlashcardsGenerationRequest(input: LlmStructuredRequest): boolean {
+    return input.userPrompt.includes('GENERATE_FLASHCARD_ITEMS=true');
+  }
+
   private isQuizGenerationRequest(input: LlmStructuredRequest): boolean {
-    const schema = input.responseJsonSchema as { required?: string[] };
-    return schema.required?.includes('items') ?? false;
+    return input.userPrompt.includes('GENERATE_QUIZ_ITEMS=true');
+  }
+
+  private buildFlashcardsGenerationResponse(
+    userPrompt: string,
+  ): LlmStructuredResponse {
+    const itemCountMatch = userPrompt.match(/ITEM_COUNT=(\d+)/);
+    const itemCount = itemCountMatch
+      ? Number.parseInt(itemCountMatch[1]!, 10)
+      : 10;
+    const chunkIds = extractJsonArrayAfterMarker(userPrompt, 'AVAILABLE_CHUNK_IDS=');
+    const chunkId = chunkIds[0] ?? 'chunk_mock_1';
+
+    const items = Array.from({ length: itemCount }, (_, index) => ({
+      front: `Carte mock ${index + 1}`,
+      back: `Réponse mock ${index + 1}`,
+      sourceChunkIds: [chunkId],
+    }));
+
+    const payload = { items };
+    return { rawText: JSON.stringify(payload), parsedJson: payload };
   }
 
   private buildQuizGenerationResponse(

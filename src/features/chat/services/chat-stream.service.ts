@@ -267,19 +267,20 @@ export class ChatStreamService {
     options: CompleteTurnOptions,
   ): Promise<CompleteTurnResult | null> {
     const intent = detectLearningGenerationIntent(content);
-    if (intent !== 'quiz') {
+    if (!intent) {
       return null;
     }
 
     const parsedCount = parseLearningItemCount(content);
     const session = await this.learningSessionsService.generate(uid, {
-      type: 'quiz',
+      type: intent,
       ...(parsedCount !== undefined ? { itemCount: parsedCount } : {}),
       sourceChatId: chatId,
     });
 
     const assistantText = buildLearningSessionCreatedReply(
       turn.learnerProfile.tutoring_language,
+      session.type,
       session.title,
     );
     options.onTextDelta?.(assistantText);

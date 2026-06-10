@@ -375,4 +375,44 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
     expect(loaded.sourceChatId).toBe(thread.id);
     expect(loaded.items).toHaveLength(5);
   });
+
+  it('creates flashcards session from chat and emits learning_session_created SSE', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const generateSpy = jest.spyOn(learningSessionsService, 'generate');
+
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi des cartes mémoire'),
+    );
+
+    expect(generateSpy).toHaveBeenCalledWith(uid, {
+      type: 'flashcards',
+      sourceChatId: thread.id,
+    });
+
+    const createdEvent = events.find(
+      (event) => event.event === 'learning_session_created',
+    );
+    expect(createdEvent?.data).toMatchObject({
+      type: 'flashcards',
+      title: expect.stringContaining('Cartes ·'),
+    });
+
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain(
+      'Tes cartes sont prêtes',
+    );
+
+    const loaded = await learningSessionsService.getById(
+      uid,
+      createdEvent!.data.sessionId,
+    );
+    expect(loaded.type).toBe('flashcards');
+    expect(loaded.items).toHaveLength(10);
+    expect(loaded.items[0]).toMatchObject({
+      front: expect.any(String),
+      back: expect.any(String),
+    });
+  });
 });
