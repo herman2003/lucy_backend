@@ -11,6 +11,7 @@ import { DocumentsModule } from './features/documents/documents.module';
 import { RetrievalModule } from './features/retrieval/retrieval.module';
 import { ChatModule } from './features/chat/chat.module';
 import { QuizModule } from './features/quiz/quiz.module';
+import { LearningSessionsModule } from './features/learning-sessions/learning-sessions.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -26,6 +27,7 @@ import { HealthController } from './health/health.controller';
     RetrievalModule,
     ChatModule,
     QuizModule,
+    LearningSessionsModule,
   ],
   controllers: [HealthController],
 })
