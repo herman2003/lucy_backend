@@ -40,6 +40,18 @@ export class LearningSessionsService {
     private readonly llmPort: LlmPort,
   ) {}
 
+  async getById(uid: string, sessionId: string): Promise<PersistedLearningSession> {
+    const session = await this.sessionsRepository.getById(uid, sessionId);
+    if (!session || session.status !== 'ready') {
+      throw new LucyApiError(
+        404,
+        LucyErrorCodes.LEARNING_SESSION_NOT_FOUND,
+        'Learning session not found',
+      );
+    }
+    return session;
+  }
+
   async generate(uid: string, body: unknown): Promise<PersistedLearningSession> {
     const input = parseGenerateLearningSessionRequest(body);
     if (input.type !== 'quiz') {

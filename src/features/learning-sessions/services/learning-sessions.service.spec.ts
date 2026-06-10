@@ -169,3 +169,129 @@ describe('LearningSessionsService (LEARN-01b)', () => {
     });
   });
 });
+
+describe('LearningSessionsService getById (LEARN-01c)', () => {
+  let service: LearningSessionsService;
+  let onboardingRepo: InMemoryOnboardingUsersRepository;
+  let documentsRepo: InMemoryDocumentsRepository;
+  let chunksRepo: InMemoryDocumentChunksRepository;
+  const uid = 'dev-user-learning-get';
+
+  beforeEach(async () => {
+    const usersStore = new InMemoryUsersStore();
+    onboardingRepo = new InMemoryOnboardingUsersRepository(usersStore);
+
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      imports: [AppConfigModule, LlmModule, PromptModule],
+      providers: [
+        LearningSessionsService,
+        ChatPrerequisitesService,
+        RetrievalService,
+        InMemoryLearningSessionsRepository,
+        {
+          provide: LEARNING_SESSIONS_REPOSITORY,
+          useExisting: InMemoryLearningSessionsRepository,
+        },
+        {
+          provide: USERS_PROFILE_REPOSITORY,
+          useValue: new InMemoryUsersProfileRepository(usersStore),
+        },
+        InMemoryDocumentsStorage,
+        InMemoryDocumentsRepository,
+        InMemoryDocumentChunksRepository,
+        { provide: DOCUMENTS_STORAGE, useExisting: InMemoryDocumentsStorage },
+        { provide: DOCUMENTS_REPOSITORY, useExisting: InMemoryDocumentsRepository },
+        {
+          provide: DOCUMENT_CHUNKS_REPOSITORY,
+          useExisting: InMemoryDocumentChunksRepository,
+        },
+        { provide: EMBEDDING_PORT, useClass: FakeEmbeddingAdapter },
+      ],
+    })
+      .overrideProvider(LUCY_CONFIG)
+      .useValue(
+        loadLucyConfig({
+          NODE_ENV: 'test',
+          FIREBASE_AUTH_MODE: 'dev',
+          LLM_PROVIDER: 'mock',
+          FIRESTORE_PROVIDER: 'memory',
+        }),
+      )
+      .compile();
+
+    service = moduleRef.get(LearningSessionsService);
+    documentsRepo = moduleRef.get(InMemoryDocumentsRepository);
+    chunksRepo = moduleRef.get(InMemoryDocumentChunksRepository);
+    moduleRef.get(PromptLoaderService).onModuleInit();
+  });
+
+  async function finalizeUserWithProfile(): Promise<void> {
+    await onboardingRepo.saveAnalyzeSuccess(uid, validProfile, 'Résumé.');
+    await onboardingRepo.finalizeOnboarding(uid);
+  }
+
+  async function seedReadyActiveDocumentWithChunk(): Promise<string> {
+    const doc = await documentsRepo.create(uid, {
+      title: 'Thermo',
+      fileName: 't.txt',
+      mimeType: 'text/plain',
+      byteSize: 10,
+    });
+    await documentsRepo.updateStatus(uid, doc.id, 'ready');
+    await documentsRepo.setSearchEnabled(uid, doc.id, true);
+    await chunksRepo.replaceChunks(uid, doc.id, [
+      {
+        id: 'chunk_test_1',
+        ordinal: 0,
+        text: 'La entropie augmente dans un système isolé.',
+        tokenEstimate: 12,
+        pageStart: 1,
+        pageEnd: 1,
+        embedding: Array.from({ length: 768 }, () => 0.01),
+      },
+    ]);
+    return doc.id;
+  }
+
+  it('returns a ready session for the owner without corpus guard', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+
+    const created = await service.generate(uid, { type: 'quiz' });
+    const loaded = await service.getById(uid, created.id);
+
+    expect(loaded).toEqual(created);
+    expect(loaded.items).toHaveLength(5);
+  });
+
+  it('throws LEARNING_SESSION_NOT_FOUND for unknown session id', async () => {
+    await expect(service.getById(uid, 'learn_missing')).rejects.toMatchObject({
+      statusCode: 404,
+      error: LucyErrorCodes.LEARNING_SESSION_NOT_FOUND,
+    });
+  });
+
+  it('returns session after all documents are disabled (G4b)', async () => {
+    await finalizeUserWithProfile();
+    const docId = await seedReadyActiveDocumentWithChunk();
+
+    const created = await service.generate(uid, { type: 'quiz' });
+    await documentsRepo.setSearchEnabled(uid, docId, false);
+
+    const loaded = await service.getById(uid, created.id);
+    expect(loaded.id).toBe(created.id);
+    expect(loaded.items).toHaveLength(5);
+  });
+
+  it('does not return sessions owned by another user', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+
+    const created = await service.generate(uid, { type: 'quiz' });
+
+    await expect(service.getById('other-user', created.id)).rejects.toMatchObject({
+      statusCode: 404,
+      error: LucyErrorCodes.LEARNING_SESSION_NOT_FOUND,
+    });
+  });
+});

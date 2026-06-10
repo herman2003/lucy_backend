@@ -1,6 +1,8 @@
 import {
   Body,
   Controller,
+  Get,
+  Param,
   Post,
   Req,
   Res,
@@ -31,6 +33,16 @@ export class LearningSessionsController {
     const uid = this.requireUid(request);
     const session = await this.learningSessionsService.generate(uid, body);
     response.status(201);
+    return buildLearningSessionResponse(session);
+  }
+
+  @Get(':sessionId')
+  async getById(
+    @Req() request: FirebaseAuthRequest,
+    @Param('sessionId') sessionId: string,
+  ) {
+    const uid = this.requireUid(request);
+    const session = await this.learningSessionsService.getById(uid, sessionId);
     return buildLearningSessionResponse(session);
   }
 
