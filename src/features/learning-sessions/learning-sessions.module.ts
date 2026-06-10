@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 
 import { LUCY_CONFIG } from '../../core/config/app-config.module';
 import type { LucyConfig } from '../../core/config/lucy-config';
@@ -13,7 +13,7 @@ import { LEARNING_SESSIONS_REPOSITORY } from './repositories/learning-sessions.r
 import { LearningSessionsService } from './services/learning-sessions.service';
 
 @Module({
-  imports: [ChatModule, RetrievalModule, LlmModule, PromptModule],
+  imports: [forwardRef(() => ChatModule), RetrievalModule, LlmModule, PromptModule],
   controllers: [LearningSessionsController],
   providers: [
     LearningSessionsService,

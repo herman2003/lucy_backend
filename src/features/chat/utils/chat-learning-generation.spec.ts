@@ -1,0 +1,27 @@
+import {
+  buildLearningSessionCreatedReply,
+  detectLearningGenerationIntent,
+  parseLearningItemCount,
+} from './chat-learning-generation';
+
+describe('chat-learning-generation (LEARN-01d)', () => {
+  it('detects quiz intent from common French phrases', () => {
+    expect(detectLearningGenerationIntent('fais-moi un quiz')).toBe('quiz');
+    expect(detectLearningGenerationIntent('Génère un quiz QCM')).toBe('quiz');
+  });
+
+  it('returns null for normal tutoring questions', () => {
+    expect(detectLearningGenerationIntent("Qu'est-ce que l'entropie ?")).toBeNull();
+  });
+
+  it('parses optional item count from the message', () => {
+    expect(parseLearningItemCount('fais-moi un quiz de 8 questions')).toBe(8);
+    expect(parseLearningItemCount('fais-moi un quiz')).toBeUndefined();
+  });
+
+  it('builds a short assistant reply in tutoring language', () => {
+    expect(buildLearningSessionCreatedReply('fr', 'Quiz · 2026-05-29')).toContain(
+      'Ton quiz est prêt',
+    );
+  });
+});

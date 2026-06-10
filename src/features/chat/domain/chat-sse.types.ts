@@ -4,6 +4,7 @@ export type ChatSseEventName =
   | 'user_message'
   | 'text_delta'
   | 'sources'
+  | 'learning_session_created'
   | 'done'
   | 'error';
 
@@ -34,6 +35,12 @@ export type ChatSseDonePayload = {
   };
 };
 
+export type ChatSseLearningSessionCreatedPayload = {
+  sessionId: string;
+  type: 'quiz' | 'flashcards';
+  title: string;
+};
+
 export type ChatSseErrorPayload = {
   code: string;
   message: string;
@@ -43,5 +50,9 @@ export type ChatSseEvent =
   | { event: 'user_message'; data: ChatSseUserMessagePayload }
   | { event: 'text_delta'; data: ChatSseTextDeltaPayload }
   | { event: 'sources'; data: ChatSseSourcesPayload }
+  | {
+      event: 'learning_session_created';
+      data: ChatSseLearningSessionCreatedPayload;
+    }
   | { event: 'done'; data: ChatSseDonePayload }
   | { event: 'error'; data: ChatSseErrorPayload };

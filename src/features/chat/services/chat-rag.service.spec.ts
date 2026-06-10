@@ -36,7 +36,8 @@ describe('ChatRagService (CHAT-05)', () => {
 
     expect(system).toContain('step_by_step');
     expect(system).toContain('encouraging');
-    expect(system).toContain('Quiz');
+    expect(system).toContain('learning sessions');
+    expect(system).not.toContain('coming soon');
   });
 
   it('resolveSourcesSafely returns empty array without calling LLM when hits are empty', async () => {

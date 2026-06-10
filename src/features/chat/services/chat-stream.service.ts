@@ -1,15 +1,22 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 
 import { LLM_STREAMING_PORT } from '../../../core/llm/llm-streaming.tokens';
 import type { LlmStreamingPort } from '../../../core/llm/llm-streaming.port';
 import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
 import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
+import type { PersistedLearningSession } from '../../learning-sessions/domain/learning-session.types';
+import { LearningSessionsService } from '../../learning-sessions/services/learning-sessions.service';
 import { RetrievalService } from '../../retrieval/services/retrieval.service';
 import {
   CHAT_AUTO_TITLE_MAX_LENGTH,
   CHAT_RETRIEVAL_LIMIT,
 } from '../chat.constants';
+import {
+  buildLearningSessionCreatedReply,
+  detectLearningGenerationIntent,
+  parseLearningItemCount,
+} from '../utils/chat-learning-generation';
 import { buildOffCorpusAssistantReply } from '../utils/chat-off-corpus-reply';
 import {
   filterRetrievalHitsForChat,
@@ -47,6 +54,7 @@ type CompleteTurnOptions = {
 type CompleteTurnResult = {
   assistantMessage: PersistedChatMessage;
   sources: ChatSourceRecord[];
+  learningSession?: PersistedLearningSession;
 };
 
 @Injectable()
@@ -58,6 +66,8 @@ export class ChatStreamService {
     private readonly retrievalService: RetrievalService,
     private readonly chatRag: ChatRagService,
     private readonly activeStreams: ChatActiveStreamRegistry,
+    @Inject(forwardRef(() => LearningSessionsService))
+    private readonly learningSessionsService: LearningSessionsService,
     @Inject(LLM_STREAMING_PORT)
     private readonly llmStreaming: LlmStreamingPort,
   ) {}
@@ -109,7 +119,7 @@ export class ChatStreamService {
       };
 
       const deltas: string[] = [];
-      const { assistantMessage, sources } = await this.completeTurn(
+      const { assistantMessage, sources, learningSession } = await this.completeTurn(
         uid,
         chatId,
         content,
@@ -123,6 +133,17 @@ export class ChatStreamService {
 
       for (const delta of deltas) {
         yield { event: 'text_delta', data: { delta } };
+      }
+
+      if (learningSession) {
+        yield {
+          event: 'learning_session_created',
+          data: {
+            sessionId: learningSession.id,
+            type: learningSession.type,
+            title: learningSession.title,
+          },
+        };
       }
 
       yield { event: 'sources', data: { sources } };
@@ -185,6 +206,17 @@ export class ChatStreamService {
     turn: TurnContext,
     options: CompleteTurnOptions = {},
   ): Promise<CompleteTurnResult> {
+    const learningTurn = await this.tryCompleteLearningGenerationTurn(
+      uid,
+      chatId,
+      content,
+      turn,
+      options,
+    );
+    if (learningTurn) {
+      return learningTurn;
+    }
+
     const rawHits = await this.retrievalService.search(uid, {
       query: content,
       limit: CHAT_RETRIEVAL_LIMIT,
@@ -225,6 +257,53 @@ export class ChatStreamService {
     }
 
     return { assistantMessage, sources };
+  }
+
+  private async tryCompleteLearningGenerationTurn(
+    uid: string,
+    chatId: string,
+    content: string,
+    turn: TurnContext,
+    options: CompleteTurnOptions,
+  ): Promise<CompleteTurnResult | null> {
+    const intent = detectLearningGenerationIntent(content);
+    if (intent !== 'quiz') {
+      return null;
+    }
+
+    const parsedCount = parseLearningItemCount(content);
+    const session = await this.learningSessionsService.generate(uid, {
+      type: 'quiz',
+      ...(parsedCount !== undefined ? { itemCount: parsedCount } : {}),
+      sourceChatId: chatId,
+    });
+
+    const assistantText = buildLearningSessionCreatedReply(
+      turn.learnerProfile.tutoring_language,
+      session.title,
+    );
+    options.onTextDelta?.(assistantText);
+
+    const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+      id: newMessageId(),
+      role: 'assistant',
+      content: assistantText,
+      createdAt: new Date().toISOString(),
+      status: 'completed',
+      sources: [],
+    });
+
+    if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {
+      await this.chatsRepository.patchThread(uid, chatId, {
+        title: buildAutoTitle(content),
+      });
+    }
+
+    return {
+      assistantMessage,
+      sources: [],
+      learningSession: session,
+    };
   }
 
   private async requireThread(uid: string, chatId: string): Promise<PersistedChatThread> {
