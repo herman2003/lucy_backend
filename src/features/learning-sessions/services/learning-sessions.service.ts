@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { LLM_PORT } from '../../../core/llm/llm.tokens';
 import type { LlmPort } from '../../../core/llm/llm.port';
@@ -37,6 +37,8 @@ const FLASHCARDS_GENERATION_USER_MARKER = 'GENERATE_FLASHCARD_ITEMS=true';
 
 @Injectable()
 export class LearningSessionsService {
+  private readonly logger = new Logger(LearningSessionsService.name);
+
   constructor(
     @Inject(LEARNING_SESSIONS_REPOSITORY)
     private readonly sessionsRepository: LearningSessionsRepository,
@@ -88,6 +90,9 @@ export class LearningSessionsService {
       limit: retrievalLimitForType(input.type, input.itemCount),
     });
     if (hits.length === 0) {
+      this.logger.warn(
+        `learning generation skipped uid=${uid} type=${input.type}: no retrieval hits`,
+      );
       throw new LucyApiError(
         502,
         LucyErrorCodes.LEARNING_GENERATION_FAILED,
@@ -179,6 +184,8 @@ export class LearningSessionsService {
   ): Promise<T[]> {
     let lastError: unknown;
 
+    let lastRawText: string | undefined;
+
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await this.llmPort.generateStructured({
@@ -186,18 +193,35 @@ export class LearningSessionsService {
           userPrompt,
           responseJsonSchema,
         });
+        lastRawText = response.rawText;
         const parsed =
           response.parsedJson ??
           (response.rawText ? JSON.parse(response.rawText) : undefined);
         return parseItems(parsed);
       } catch (error) {
         lastError = error;
+        if (error instanceof LucyApiError) {
+          this.logger.warn(
+            `learning generation attempt ${attempt + 1} failed code=${error.error}: ${error.message}`,
+          );
+          if (
+            error.error === LucyErrorCodes.LEARNING_GENERATION_FAILED &&
+            lastRawText
+          ) {
+            this.logger.warn(
+              `learning generation raw LLM preview: ${lastRawText.slice(0, 500)}`,
+            );
+          }
+        }
       }
     }
 
     if (lastError instanceof LucyApiError) {
       throw lastError;
     }
+    this.logger.warn(
+      `${failureMessage}: ${formatGenerationErrorCause(lastError)}`,
+    );
     throw new LucyApiError(
       502,
       LucyErrorCodes.LEARNING_GENERATION_FAILED,
@@ -245,7 +269,9 @@ function buildGenerationUserPrompt(
   itemCount: number,
 ): string {
   const chunkIds = hits.map((hit) => hit.chunkId);
-  const excerpts = hits.map((hit) => hit.contextHeader).join('\n\n');
+  const excerpts = hits
+    .map((hit) => `[chunkId=${hit.chunkId}]\n${hit.contextHeader}`)
+    .join('\n\n');
 
   return [
     marker,
@@ -255,6 +281,13 @@ function buildGenerationUserPrompt(
     '## Excerpts',
     excerpts,
   ].join('\n');
+}
+
+function formatGenerationErrorCause(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  return String(error);
 }
 
 function mapChatPrerequisiteError(error: unknown): never {

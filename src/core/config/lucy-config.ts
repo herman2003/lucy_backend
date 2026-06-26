@@ -1,7 +1,12 @@
 import { GEMINI_EMBEDDING_MODEL_DEFAULT } from '../llm/embedding.constants';
+import {
+  OPENROUTER_APP_NAME_DEFAULT,
+  OPENROUTER_APP_URL_DEFAULT,
+  OPENROUTER_MODEL_DEFAULT,
+} from '../llm/openrouter.constants';
 import { parseCorsAllowedOrigins } from './lucy-cors';
 
-export type LlmProvider = 'gemini' | 'openai' | 'mock';
+export type LlmProvider = 'gemini' | 'openrouter' | 'mock';
 export type FirebaseAuthMode = 'firebase' | 'dev';
 export type FirestoreProvider = 'firebase' | 'memory';
 export type StorageProvider = 'firebase' | 'r2';
@@ -21,6 +26,10 @@ export type LucyConfig = {
   geminiApiKey: string;
   geminiModel: string;
   geminiEmbeddingModel: string;
+  openRouterApiKey: string;
+  openRouterModel: string;
+  openRouterAppUrl: string;
+  openRouterAppName: string;
   corsAllowedOrigins: string[];
   firebaseAuthMode: FirebaseAuthMode;
   firestoreProvider: FirestoreProvider;
@@ -56,6 +65,10 @@ export function loadLucyConfig(
     geminiModel: env.GEMINI_MODEL ?? 'gemini-2.5-flash',
     geminiEmbeddingModel:
       env.GEMINI_EMBEDDING_MODEL ?? GEMINI_EMBEDDING_MODEL_DEFAULT,
+    openRouterApiKey: env.OPENROUTER_API_KEY ?? '',
+    openRouterModel: env.OPENROUTER_MODEL ?? OPENROUTER_MODEL_DEFAULT,
+    openRouterAppUrl: env.OPENROUTER_APP_URL ?? OPENROUTER_APP_URL_DEFAULT,
+    openRouterAppName: env.OPENROUTER_APP_NAME ?? OPENROUTER_APP_NAME_DEFAULT,
     corsAllowedOrigins: parseCorsAllowedOrigins(env.CORS_ALLOWED_ORIGINS),
     firebaseAuthMode: resolveFirebaseAuthMode(env),
     firestoreProvider: resolveFirestoreProvider(env),
@@ -64,6 +77,12 @@ export function loadLucyConfig(
 
 /** Fail fast when R2 is selected but credentials or bucket are missing. */
 export function validateLucyConfig(config: LucyConfig): void {
+  if (config.llmProvider === 'openrouter' && !config.openRouterApiKey.trim()) {
+    throw new Error(
+      'LLM_PROVIDER=openrouter requires OPENROUTER_API_KEY. See backend/.env.example',
+    );
+  }
+
   if (config.firestoreProvider === 'memory') {
     return;
   }

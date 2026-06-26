@@ -1,4 +1,4 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 
 import { LLM_STREAMING_PORT } from '../../../core/llm/llm-streaming.tokens';
 import type { LlmStreamingPort } from '../../../core/llm/llm-streaming.port';
@@ -59,6 +59,8 @@ type CompleteTurnResult = {
 
 @Injectable()
 export class ChatStreamService {
+  private readonly logger = new Logger(ChatStreamService.name);
+
   constructor(
     @Inject(CHATS_REPOSITORY)
     private readonly chatsRepository: ChatsRepository,
@@ -163,6 +165,9 @@ export class ChatStreamService {
       };
     } catch (error) {
       const apiError = toStreamError(error);
+      this.logger.warn(
+        `stream failed chatId=${chatId} code=${apiError.error}: ${formatStreamErrorCause(error)}`,
+      );
       yield {
         event: 'error',
         data: {
@@ -344,8 +349,18 @@ function toStreamError(error: unknown): LucyApiError {
     return error;
   }
   return new LucyApiError(
-    503,
-    LucyErrorCodes.LLM_UNAVAILABLE,
+    500,
+    LucyErrorCodes.INTERNAL_ERROR,
     error instanceof Error ? error.message : 'Stream failed',
   );
+}
+
+function formatStreamErrorCause(error: unknown): string {
+  if (error instanceof LucyApiError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  return String(error);
 }

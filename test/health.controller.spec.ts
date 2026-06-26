@@ -35,6 +35,7 @@ describe('HealthController', () => {
         firebaseAuthMode: 'dev',
         firestoreProvider: 'memory',
         geminiConfigured: false,
+        openRouterConfigured: false,
         localStackReady: true,
         storageProvider: 'firebase',
       },

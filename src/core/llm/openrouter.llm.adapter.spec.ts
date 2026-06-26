@@ -1,9 +1,9 @@
 import { LucyErrorCodes } from '../errors/lucy-error-codes';
-import { GeminiLlmAdapter } from './gemini.llm.adapter';
+import { OpenRouterLlmAdapter } from './openrouter.llm.adapter';
 
-describe('GeminiLlmAdapter', () => {
-  it('throws LLM_UNAVAILABLE when GEMINI_API_KEY is not set', async () => {
-    const adapter = new GeminiLlmAdapter({
+describe('OpenRouterLlmAdapter', () => {
+  it('throws LLM_UNAVAILABLE when OPENROUTER_API_KEY is not set', async () => {
+    const adapter = new OpenRouterLlmAdapter({
       port: 3001,
       nodeEnv: 'test',
       firebaseProjectId: 'test',
@@ -14,7 +14,7 @@ describe('GeminiLlmAdapter', () => {
       r2SecretAccessKey: '',
       r2Bucket: '',
       r2Endpoint: '',
-      llmProvider: 'gemini',
+      llmProvider: 'openrouter',
       geminiApiKey: '',
       geminiModel: 'gemini-2.5-flash',
       geminiEmbeddingModel: 'gemini-embedding-001',

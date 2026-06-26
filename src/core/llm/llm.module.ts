@@ -6,6 +6,8 @@ import { GeminiLlmAdapter } from './gemini.llm.adapter';
 import { GeminiLlmStreamingAdapter } from './gemini.llm-streaming.adapter';
 import { MockLlmAdapter } from './mock.llm.adapter';
 import { MockLlmStreamingAdapter } from './mock.llm-streaming.adapter';
+import { OpenRouterLlmAdapter } from './openrouter.llm.adapter';
+import { OpenRouterLlmStreamingAdapter } from './openrouter.llm-streaming.adapter';
 import { LLM_STREAMING_PORT } from './llm-streaming.tokens';
 import { LLM_PORT } from './llm.tokens';
 import type { LlmPort } from './llm.port';
@@ -15,6 +17,8 @@ import type { LlmStreamingPort } from './llm-streaming.port';
   providers: [
     GeminiLlmAdapter,
     GeminiLlmStreamingAdapter,
+    OpenRouterLlmAdapter,
+    OpenRouterLlmStreamingAdapter,
     MockLlmAdapter,
     MockLlmStreamingAdapter,
     {
@@ -22,6 +26,7 @@ import type { LlmStreamingPort } from './llm-streaming.port';
       useFactory: (
         config: LucyConfig,
         gemini: GeminiLlmAdapter,
+        openRouter: OpenRouterLlmAdapter,
         mock: MockLlmAdapter,
       ): LlmPort => {
         if (config.llmProvider === 'mock') {
@@ -30,17 +35,21 @@ import type { LlmStreamingPort } from './llm-streaming.port';
         if (config.llmProvider === 'gemini') {
           return gemini;
         }
+        if (config.llmProvider === 'openrouter') {
+          return openRouter;
+        }
         throw new Error(
           `LLM provider "${config.llmProvider}" is not implemented yet`,
         );
       },
-      inject: [LUCY_CONFIG, GeminiLlmAdapter, MockLlmAdapter],
+      inject: [LUCY_CONFIG, GeminiLlmAdapter, OpenRouterLlmAdapter, MockLlmAdapter],
     },
     {
       provide: LLM_STREAMING_PORT,
       useFactory: (
         config: LucyConfig,
         gemini: GeminiLlmStreamingAdapter,
+        openRouter: OpenRouterLlmStreamingAdapter,
         mock: MockLlmStreamingAdapter,
       ): LlmStreamingPort => {
         if (config.llmProvider === 'mock') {
@@ -49,11 +58,19 @@ import type { LlmStreamingPort } from './llm-streaming.port';
         if (config.llmProvider === 'gemini') {
           return gemini;
         }
+        if (config.llmProvider === 'openrouter') {
+          return openRouter;
+        }
         throw new Error(
           `LLM provider "${config.llmProvider}" is not implemented yet`,
         );
       },
-      inject: [LUCY_CONFIG, GeminiLlmStreamingAdapter, MockLlmStreamingAdapter],
+      inject: [
+        LUCY_CONFIG,
+        GeminiLlmStreamingAdapter,
+        OpenRouterLlmStreamingAdapter,
+        MockLlmStreamingAdapter,
+      ],
     },
   ],
   exports: [
@@ -61,6 +78,8 @@ import type { LlmStreamingPort } from './llm-streaming.port';
     LLM_STREAMING_PORT,
     GeminiLlmAdapter,
     GeminiLlmStreamingAdapter,
+    OpenRouterLlmAdapter,
+    OpenRouterLlmStreamingAdapter,
     MockLlmAdapter,
     MockLlmStreamingAdapter,
   ],

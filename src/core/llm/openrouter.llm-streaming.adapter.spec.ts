@@ -1,9 +1,10 @@
 import { LucyErrorCodes } from '../errors/lucy-error-codes';
-import { GeminiLlmAdapter } from './gemini.llm.adapter';
+import { collectStreamText } from './mock.llm-streaming.adapter';
+import { OpenRouterLlmStreamingAdapter } from './openrouter.llm-streaming.adapter';
 
-describe('GeminiLlmAdapter', () => {
-  it('throws LLM_UNAVAILABLE when GEMINI_API_KEY is not set', async () => {
-    const adapter = new GeminiLlmAdapter({
+describe('OpenRouterLlmStreamingAdapter', () => {
+  it('throws LLM_UNAVAILABLE when OPENROUTER_API_KEY is not set', async () => {
+    const adapter = new OpenRouterLlmStreamingAdapter({
       port: 3001,
       nodeEnv: 'test',
       firebaseProjectId: 'test',
@@ -14,7 +15,7 @@ describe('GeminiLlmAdapter', () => {
       r2SecretAccessKey: '',
       r2Bucket: '',
       r2Endpoint: '',
-      llmProvider: 'gemini',
+      llmProvider: 'openrouter',
       geminiApiKey: '',
       geminiModel: 'gemini-2.5-flash',
       geminiEmbeddingModel: 'gemini-embedding-001',
@@ -28,11 +29,9 @@ describe('GeminiLlmAdapter', () => {
     });
 
     await expect(
-      adapter.generateStructured({
-        systemPrompt: 'sys',
-        userPrompt: 'user',
-        responseJsonSchema: { type: 'object' },
-      }),
+      collectStreamText(
+        adapter.streamText({ systemPrompt: 'sys', userPrompt: 'user' }),
+      ),
     ).rejects.toMatchObject({
       error: LucyErrorCodes.LLM_UNAVAILABLE,
       statusCode: 503,

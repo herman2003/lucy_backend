@@ -3,7 +3,7 @@ You generate quiz questions strictly from the provided document excerpts.
 Rules:
 - Output JSON only, matching the response schema.
 - Create exactly {{itemCount}} multiple-choice questions with 4 choices each.
-- Each question must cite at least one sourceChunkId from AVAILABLE_CHUNK_IDS.
+- Each question must cite at least one sourceChunkId from AVAILABLE_CHUNK_IDS (each excerpt is prefixed with [chunkId=…]).
 - Use the tutoring language: {{tutoring_language}}.
 - Match learner style: {{explanation_style}}, tone: {{feedback_tone}}.
 - Do not invent facts outside the excerpts.

@@ -49,10 +49,14 @@ Copy `.env.example` to `.env`. Variables are loaded in `src/core/config/lucy-con
 | `R2_ENDPOINT` | No | Default `https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com` (use EU URL from dashboard if needed) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Dev typical | Path to service account JSON for Firestore + Storage Admin |
 | `FIRESTORE_PROVIDER` | No (dev) | `firebase` (default) or `memory` (local tests without service account) |
-| `LLM_PROVIDER` | Yes | `gemini` (production-like) or `mock` (local dev, no API key) |
-| `GEMINI_API_KEY` | Yes for LLM routes | Server-only secret |
-| `GEMINI_MODEL` | No (default `gemini-2.5-flash`) | Gemini model id |
-| `GEMINI_EMBEDDING_MODEL` | No (default `gemini-embedding-001`) | Gemini embedding model for document RAG (**always** used at runtime, not affected by `LLM_PROVIDER=mock`) |
+| `LLM_PROVIDER` | Yes | `gemini`, `openrouter`, or `mock` (local dev, no LLM API key) |
+| `GEMINI_API_KEY` | Yes for embeddings + when `LLM_PROVIDER=gemini` | Server-only secret |
+| `GEMINI_MODEL` | No (default `gemini-2.5-flash`) | Gemini model id (direct API) |
+| `OPENROUTER_API_KEY` | Yes when `LLM_PROVIDER=openrouter` | [OpenRouter](https://openrouter.ai/keys) server-only secret |
+| `OPENROUTER_MODEL` | No (default `google/gemini-2.5-flash`) | OpenRouter model id |
+| `OPENROUTER_APP_URL` | No | Optional `HTTP-Referer` header |
+| `OPENROUTER_APP_NAME` | No | Optional `X-Title` header |
+| `GEMINI_EMBEDDING_MODEL` | No (default `gemini-embedding-001`) | Gemini embedding model for document RAG (**always** used at runtime, not affected by `LLM_PROVIDER`) |
 | `CORS_ALLOWED_ORIGINS` | No | Extra allowed browser origins (comma-separated) |
 
 ### Document RAG embeddings (D2)
@@ -87,7 +91,22 @@ In Firebase console → Firestore → **Indexes** → composite / vector index o
 
 Stale `uploading` documents (&gt; 24 h) are marked `failed` with `UPLOAD_ABANDONED` by `DocumentUploadSweeperService` (orphan Storage object removed).
 
-**Secrets must stay on the server.** Never ship `GEMINI_API_KEY` or the service account to the Flutter client.
+**Secrets must stay on the server.** Never ship `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, or the service account to the Flutter client.
+
+### OpenRouter (`LLM_PROVIDER=openrouter`)
+
+Chat streaming, onboarding, and quiz/flashcards generation use OpenRouter (`fetch` → `https://openrouter.ai/api/v1/chat/completions`). **Embeddings stay on Gemini** — keep `GEMINI_API_KEY` set for document RAG.
+
+```bash
+# In .env
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=google/gemini-2.5-flash
+GEMINI_API_KEY=...   # still required for embeddings / retrieval
+npm run start:dev
+```
+
+Switch back to direct Gemini anytime with `LLM_PROVIDER=gemini` (your choice via env only).
 
 ### Local dev without Gemini (`LLM_PROVIDER=mock`)
 

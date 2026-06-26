@@ -1,21 +1,25 @@
 import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
-import type {
-  LearningSessionQuizItem,
-  LearningSessionSource,
-} from '../domain/learning-session.types';
+import type { LearningSessionQuizItem } from '../domain/learning-session.types';
 import type { SearchRetrievalHitDto } from '../../retrieval/dto/search-retrieval.dto';
+import { normalizeGeneratedQuizPayload } from './generated-quiz-normalizer';
+import { mapLearningSessionSources } from './learning-session-source.mapper';
 
 export function parseGeneratedQuizItems(
   parsed: unknown,
   hits: SearchRetrievalHitDto[],
   expectedCount: number,
 ): LearningSessionQuizItem[] {
-  if (!parsed || typeof parsed !== 'object') {
-    throw generationFailed('LLM response is not an object');
+  let record: Record<string, unknown>;
+  try {
+    record = normalizeGeneratedQuizPayload(parsed, {
+      fallbackChunkIds: hits.map((hit) => hit.chunkId),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'items must be an array';
+    throw generationFailed(message);
   }
 
-  const record = parsed as Record<string, unknown>;
   if (!Array.isArray(record.items)) {
     throw generationFailed('items must be an array');
   }
@@ -24,17 +28,13 @@ export function parseGeneratedQuizItems(
     throw generationFailed(`expected ${expectedCount} quiz items`);
   }
 
-  const hitsByChunkId = new Map(hits.map((hit) => [hit.chunkId, hit]));
-
-  return record.items.map((rawItem, index) =>
-    parseQuizItem(rawItem, index, hitsByChunkId),
-  );
+  return record.items.map((rawItem, index) => parseQuizItem(rawItem, index, hits));
 }
 
 function parseQuizItem(
   rawItem: unknown,
   index: number,
-  hitsByChunkId: Map<string, SearchRetrievalHitDto>,
+  hits: SearchRetrievalHitDto[],
 ): LearningSessionQuizItem {
   if (!rawItem || typeof rawItem !== 'object') {
     throw generationFailed(`items[${index}] must be an object`);
@@ -49,7 +49,7 @@ function parseQuizItem(
     `items[${index}].explanation`,
   );
   const sourceChunkIds = readSourceChunkIds(item.sourceChunkIds, index);
-  const sources = mapSources(sourceChunkIds, hitsByChunkId, index);
+  const sources = mapLearningSessionSources(sourceChunkIds, hits);
 
   if (sources.length === 0) {
     throw generationFailed(`items[${index}] must reference at least one known chunk`);
@@ -104,32 +104,6 @@ function readNonEmptyString(value: unknown, field: string): string {
     throw generationFailed(`${field} must be a non-empty string`);
   }
   return value.trim();
-}
-
-function mapSources(
-  chunkIds: string[],
-  hitsByChunkId: Map<string, SearchRetrievalHitDto>,
-  index: number,
-): LearningSessionSource[] {
-  const uniqueIds = [...new Set(chunkIds)];
-  const sources: LearningSessionSource[] = [];
-
-  for (const chunkId of uniqueIds) {
-    const hit = hitsByChunkId.get(chunkId);
-    if (!hit) {
-      throw generationFailed(`items[${index}] references unknown chunkId ${chunkId}`);
-    }
-    sources.push({
-      chunkId: hit.chunkId,
-      documentId: hit.documentId,
-      title: hit.title,
-      excerpt: hit.text.slice(0, 240),
-      ...(hit.pageStart !== undefined ? { pageStart: hit.pageStart } : {}),
-      ...(hit.pageEnd !== undefined ? { pageEnd: hit.pageEnd } : {}),
-    });
-  }
-
-  return sources;
 }
 
 function generationFailed(message: string): LucyApiError {
