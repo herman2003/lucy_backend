@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { LearnerProfile } from '../../features/onboarding/domain/learner-profile.enums';
+import { buildDifficultyGuidance } from './learner-generation-prompt.util';
 
 export type ValidateAnswerUserPromptVars = {
   locale: string;
@@ -67,24 +68,20 @@ export class PromptLoaderService implements OnModuleInit {
     learnerProfile: LearnerProfile,
     itemCount: number,
   ): string {
-    return renderHandlebarsTemplate(this.quizGeneratorSystemTemplate, {
-      itemCount: String(itemCount),
-      tutoring_language: learnerProfile.tutoring_language,
-      explanation_style: learnerProfile.explanation_style,
-      feedback_tone: learnerProfile.feedback_tone,
-    });
+    return renderHandlebarsTemplate(
+      this.quizGeneratorSystemTemplate,
+      buildLearningGeneratorTemplateVars(learnerProfile, itemCount),
+    );
   }
 
   getFlashcardsGeneratorSystemPrompt(
     learnerProfile: LearnerProfile,
     itemCount: number,
   ): string {
-    return renderHandlebarsTemplate(this.flashcardsGeneratorSystemTemplate, {
-      itemCount: String(itemCount),
-      tutoring_language: learnerProfile.tutoring_language,
-      explanation_style: learnerProfile.explanation_style,
-      feedback_tone: learnerProfile.feedback_tone,
-    });
+    return renderHandlebarsTemplate(
+      this.flashcardsGeneratorSystemTemplate,
+      buildLearningGeneratorTemplateVars(learnerProfile, itemCount),
+    );
   }
 
   getCorpusStudyAnalyzerSystemPrompt(learnerProfile: LearnerProfile): string {
@@ -149,4 +146,21 @@ export function renderHandlebarsTemplate(
   vars: Record<string, string>,
 ): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? '');
+}
+
+function buildLearningGeneratorTemplateVars(
+  learnerProfile: LearnerProfile,
+  itemCount: number,
+): Record<string, string> {
+  return {
+    itemCount: String(itemCount),
+    primary_role: learnerProfile.primary_role,
+    main_domains: learnerProfile.main_domains.join(', '),
+    learning_goal: learnerProfile.learning_goal,
+    self_assessed_level: learnerProfile.self_assessed_level,
+    tutoring_language: learnerProfile.tutoring_language,
+    explanation_style: learnerProfile.explanation_style,
+    feedback_tone: learnerProfile.feedback_tone,
+    difficulty_guidance: buildDifficultyGuidance(learnerProfile.self_assessed_level),
+  };
 }

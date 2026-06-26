@@ -4,6 +4,8 @@ import { AppConfigModule, LUCY_CONFIG } from '../../../core/config/app-config.mo
 import { loadLucyConfig } from '../../../core/config/lucy-config';
 import { EMBEDDING_PORT } from '../../../core/llm/embedding.tokens';
 import { FakeEmbeddingAdapter } from '../../../core/llm/fake.embedding.adapter';
+import { LLM_PORT } from '../../../core/llm/llm.tokens';
+import type { LlmPort } from '../../../core/llm/llm.port';
 import { LlmModule } from '../../../core/llm/llm.module';
 import { PromptLoaderService } from '../../../core/prompt/prompt-loader.service';
 import { PromptModule } from '../../../core/prompt/prompt.module';
@@ -37,6 +39,7 @@ const validProfile = {
 describe('LearningSessionsService (LEARN-01b)', () => {
   let service: LearningSessionsService;
   let retrievalService: RetrievalService;
+  let llmPort: LlmPort;
   let onboardingRepo: InMemoryOnboardingUsersRepository;
   let documentsRepo: InMemoryDocumentsRepository;
   let chunksRepo: InMemoryDocumentChunksRepository;
@@ -86,6 +89,7 @@ describe('LearningSessionsService (LEARN-01b)', () => {
 
     service = moduleRef.get(LearningSessionsService);
     retrievalService = moduleRef.get(RetrievalService);
+    llmPort = moduleRef.get(LLM_PORT);
     documentsRepo = moduleRef.get(InMemoryDocumentsRepository);
     chunksRepo = moduleRef.get(InMemoryDocumentChunksRepository);
     moduleRef.get(PromptLoaderService).onModuleInit();
@@ -184,6 +188,22 @@ describe('LearningSessionsService (LEARN-01b)', () => {
     for (const item of session.items) {
       expect(item.sources.every((source) => source.chunkId === 'chunk_0')).toBe(true);
     }
+  });
+
+  it('passes learner profile and difficulty guidance to quiz generation prompt (LEARN-07e)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const generateSpy = jest.spyOn(llmPort, 'generateStructured');
+
+    await service.generate(uid, { type: 'quiz', itemCount: 5 });
+
+    expect(generateSpy).toHaveBeenCalled();
+    const call = generateSpy.mock.calls[0]?.[0];
+    expect(call?.systemPrompt).toContain('learning_goal');
+    expect(call?.systemPrompt).toContain('exam');
+    expect(call?.systemPrompt).toContain('self_assessed_level');
+    expect(call?.systemPrompt).toContain('intermediate');
+    expect(call?.systemPrompt.toLowerCase()).toContain('intermediate difficulty');
   });
 
   it('generates a ready quiz session with 5 default items', async () => {
