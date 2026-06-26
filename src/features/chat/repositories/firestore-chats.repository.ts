@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 
 import type { PersistedChatMessage, PersistedChatThread } from '../domain/chat.types';
+import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
 import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
 import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import type {
@@ -16,6 +17,7 @@ type FirestoreChatThreadData = {
   lastMessagePreview?: string;
   pendingLearningGeneration?: PendingLearningGeneration;
   corpusStudyPlan?: CorpusStudyPlan;
+  lastLearningGenerationRequest?: LastLearningGenerationRequest;
 };
 
 type FirestoreChatMessageData = {
@@ -144,6 +146,7 @@ export class FirestoreChatsRepository implements ChatsRepository {
       title?: string;
       pendingLearningGeneration?: PendingLearningGeneration | null;
       corpusStudyPlan?: CorpusStudyPlan | null;
+      lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
     },
   ): Promise<void> {
     const threadRef = this.chatsCollection(uid).doc(chatId);
@@ -170,6 +173,13 @@ export class FirestoreChatsRepository implements ChatsRepository {
         updates.corpusStudyPlan = admin.firestore.FieldValue.delete();
       } else {
         updates.corpusStudyPlan = patch.corpusStudyPlan;
+      }
+    }
+    if (patch.lastLearningGenerationRequest !== undefined) {
+      if (patch.lastLearningGenerationRequest === null) {
+        updates.lastLearningGenerationRequest = admin.firestore.FieldValue.delete();
+      } else {
+        updates.lastLearningGenerationRequest = patch.lastLearningGenerationRequest;
       }
     }
     await threadRef.set(updates, { merge: true });
@@ -214,6 +224,9 @@ export class FirestoreChatsRepository implements ChatsRepository {
         : {}),
       ...(data.corpusStudyPlan !== undefined
         ? { corpusStudyPlan: data.corpusStudyPlan }
+        : {}),
+      ...(data.lastLearningGenerationRequest !== undefined
+        ? { lastLearningGenerationRequest: data.lastLearningGenerationRequest }
         : {}),
     };
   }

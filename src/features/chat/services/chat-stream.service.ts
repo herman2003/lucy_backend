@@ -21,6 +21,7 @@ import {
   buildLearningAnalyzingMessage,
   buildLearningGenerationFailedMessage,
   buildLearningGeneratingMessage,
+  buildLearningRegeneratingMessage,
   buildTopicFallbackPrompt,
 } from '../utils/chat-learning-dialogue-messages';
 import { readLearningGenerationAdviceKey } from '../../learning-sessions/utils/learning-generation-failure.error';
@@ -307,6 +308,7 @@ export class ChatStreamService {
       pending: turn.thread.pendingLearningGeneration,
       tutoringLanguage: turn.learnerProfile.tutoring_language,
       corpusStudyPlan: turn.thread.corpusStudyPlan,
+      lastLearningGenerationRequest: turn.thread.lastLearningGenerationRequest,
     });
     if (!outcome) {
       return null;
@@ -347,10 +349,15 @@ export class ChatStreamService {
       return { assistantMessage, sources: [] };
     }
 
-    const generatingText = buildLearningGeneratingMessage(
-      turn.learnerProfile.tutoring_language,
-      outcome.type,
-    );
+    const generatingText = outcome.isRegeneration
+      ? buildLearningRegeneratingMessage(
+          turn.learnerProfile.tutoring_language,
+          outcome.type,
+        )
+      : buildLearningGeneratingMessage(
+          turn.learnerProfile.tutoring_language,
+          outcome.type,
+        );
     options.onTextDelta?.(generatingText);
 
     await this.chatsRepository.patchThread(uid, chatId, {
@@ -419,6 +426,18 @@ export class ChatStreamService {
       createdAt: new Date().toISOString(),
       status: 'completed',
       sources: [],
+    });
+
+    await this.chatsRepository.patchThread(uid, chatId, {
+      lastLearningGenerationRequest: {
+        type: outcome.type,
+        itemCount: outcome.itemCount,
+        requestedAt: new Date().toISOString(),
+        ...(outcome.topicHint !== undefined ? { topicHint: outcome.topicHint } : {}),
+        ...(outcome.selectedFocusAreaIds !== undefined
+          ? { selectedFocusAreaIds: outcome.selectedFocusAreaIds }
+          : {}),
+      },
     });
 
     if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {

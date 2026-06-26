@@ -3,6 +3,7 @@ import type {
   PersistedChatMessage,
   PersistedChatThread,
 } from '../domain/chat.types';
+import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
 import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
 
 export const CHATS_REPOSITORY = Symbol('CHATS_REPOSITORY');
@@ -38,6 +39,7 @@ export interface ChatsRepository {
       title?: string;
       pendingLearningGeneration?: PendingLearningGeneration | null;
       corpusStudyPlan?: CorpusStudyPlan | null;
+      lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
     },
   ): Promise<void>;
 

@@ -2,6 +2,7 @@ import type { LearningSessionType } from '../../learning-sessions/domain/learnin
 import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import { LEARNING_SESSION_ITEM_LIMITS } from '../../learning-sessions/dto/learning-session.constants';
 import type { TutoringLanguage } from '../../onboarding/domain/learner-profile.enums';
+import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
 import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
 import { parseFocusSelection } from './chat-focus-selection.parser';
 import {
@@ -14,10 +15,12 @@ import {
   buildLearningInvalidCountMessage,
   buildLearningLaunchClarifyMessage,
   buildLearningLaunchRecap,
+  buildLearningRegenerationUnavailableMessage,
   buildTopicFallbackPrompt,
 } from './chat-learning-dialogue-messages';
 import {
   detectLearningGenerationIntent,
+  detectLearningRegenerationIntent,
   parseLearningItemCount,
 } from './chat-learning-generation';
 
@@ -38,6 +41,7 @@ export type LearningDialogueOutcome =
       itemCount: number;
       topicHint?: string;
       selectedFocusAreaIds?: string[];
+      isRegeneration?: boolean;
     };
 
 export type ProcessLearningDialogueInput = {
@@ -45,6 +49,7 @@ export type ProcessLearningDialogueInput = {
   pending: PendingLearningGeneration | null | undefined;
   tutoringLanguage: TutoringLanguage;
   corpusStudyPlan?: CorpusStudyPlan | null;
+  lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
   nowIso?: string;
 };
 
@@ -142,6 +147,13 @@ export function processLearningDialogueTurn(
     );
   }
 
+  if (detectLearningRegenerationIntent(message)) {
+    return resolveRegenerationDialogue(
+      input.lastLearningGenerationRequest,
+      input.tutoringLanguage,
+    );
+  }
+
   const intent = detectLearningGenerationIntent(message);
   if (!intent) {
     return null;
@@ -172,6 +184,33 @@ export function processLearningDialogueTurn(
     kind: 'assistant_reply',
     text: buildLearningConfirmPrompt(input.tutoringLanguage, intent),
     pending,
+  };
+}
+
+function resolveRegenerationDialogue(
+  lastRequest: LastLearningGenerationRequest | null | undefined,
+  tutoringLanguage: TutoringLanguage,
+): LearningDialogueOutcome {
+  if (!lastRequest) {
+    return {
+      kind: 'assistant_reply',
+      text: buildLearningRegenerationUnavailableMessage(tutoringLanguage),
+      pending: null,
+    };
+  }
+
+  return {
+    kind: 'generate',
+    pending: null,
+    type: lastRequest.type,
+    itemCount: lastRequest.itemCount,
+    isRegeneration: true,
+    ...(lastRequest.topicHint !== undefined
+      ? { topicHint: lastRequest.topicHint }
+      : {}),
+    ...(lastRequest.selectedFocusAreaIds !== undefined
+      ? { selectedFocusAreaIds: lastRequest.selectedFocusAreaIds }
+      : {}),
   };
 }
 

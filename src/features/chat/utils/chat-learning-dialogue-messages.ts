@@ -109,6 +109,41 @@ export function buildLearningGeneratingMessage(
   }
 }
 
+export function buildLearningRegeneratingMessage(
+  tutoringLanguage: TutoringLanguage,
+  type: LearningSessionType,
+): string {
+  const lang = resolveLanguage(tutoringLanguage);
+  switch (lang) {
+    case 'en':
+      return type === 'quiz'
+        ? 'I am generating the same quiz again with the same settings…'
+        : 'I am generating the same flashcards again with the same settings…';
+    case 'de':
+      return type === 'quiz'
+        ? 'Ich erstelle dasselbe Quiz noch einmal mit denselben Einstellungen…'
+        : 'Ich erstelle dieselben Karteikarten noch einmal mit denselben Einstellungen…';
+    default:
+      return type === 'quiz'
+        ? 'Je relance le même quiz avec les mêmes paramètres…'
+        : 'Je relance les mêmes cartes avec les mêmes paramètres…';
+  }
+}
+
+export function buildLearningRegenerationUnavailableMessage(
+  tutoringLanguage: TutoringLanguage,
+): string {
+  const lang = resolveLanguage(tutoringLanguage);
+  switch (lang) {
+    case 'en':
+      return 'I do not have a previous quiz or flashcards request in this chat yet. Ask me for a quiz or flashcards first.';
+    case 'de':
+      return 'In diesem Chat gibt es noch keine vorherige Quiz- oder Karteikarten-Anfrage. Bitte fordere zuerst ein Quiz oder Karteikarten an.';
+    default:
+      return 'Je n’ai pas encore de quiz ou de cartes à relancer dans cette conversation. Demande-moi d’abord un quiz ou des cartes.';
+  }
+}
+
 export function buildLearningCancelledMessage(
   tutoringLanguage: TutoringLanguage,
 ): string {

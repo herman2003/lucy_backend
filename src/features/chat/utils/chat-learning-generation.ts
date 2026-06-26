@@ -21,6 +21,28 @@ const FLASHCARDS_INTENT_PATTERNS = [
   /generate flashcards/i,
 ];
 
+const REGENERATION_INTENT_PATTERNS = [
+  /refais(?:\s+pareil)?/i,
+  /recommence/i,
+  /encore(?:\s+une\s+fois)?/i,
+  /regénère(?:\s+pareil)?/i,
+  /regenere(?:\s+pareil)?/i,
+  /same again/i,
+  /do it again/i,
+  /\bredo\b/i,
+  /nochmal/i,
+  /noch\s+einmal/i,
+  /erneut/i,
+];
+
+export function detectLearningRegenerationIntent(message: string): boolean {
+  const normalized = message.trim();
+  if (!normalized) {
+    return false;
+  }
+  return REGENERATION_INTENT_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 export function detectLearningGenerationIntent(
   message: string,
 ): LearningSessionType | null {

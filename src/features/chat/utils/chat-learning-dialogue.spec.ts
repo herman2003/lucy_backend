@@ -177,4 +177,46 @@ describe('chat-learning-dialogue (LEARN-06)', () => {
     expect(isLearningDialogueCancel('annule')).toBe(true);
     expect(isLearningDialogueAffirmative('oui')).toBe(true);
   });
+
+  it('explains when regeneration is requested without a previous session (LEARN-09c)', () => {
+    const outcome = processLearningDialogueTurn({
+      message: 'refais pareil',
+      pending: null,
+      tutoringLanguage: 'fr',
+      lastLearningGenerationRequest: null,
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'assistant_reply',
+      pending: null,
+    });
+    expect(outcome && outcome.kind === 'assistant_reply' ? outcome.text : '').toContain(
+      'pas encore',
+    );
+  });
+
+  it('regenerates with the previous request parameters (LEARN-09c)', () => {
+    const outcome = processLearningDialogueTurn({
+      message: 'refais pareil',
+      pending: null,
+      tutoringLanguage: 'fr',
+      lastLearningGenerationRequest: {
+        type: 'quiz',
+        itemCount: 5,
+        selectedFocusAreaIds: ['focus_1'],
+        requestedAt: now,
+      },
+      nowIso: now,
+    });
+
+    expect(outcome).toEqual({
+      kind: 'generate',
+      pending: null,
+      type: 'quiz',
+      itemCount: 5,
+      selectedFocusAreaIds: ['focus_1'],
+      isRegeneration: true,
+    });
+  });
 });

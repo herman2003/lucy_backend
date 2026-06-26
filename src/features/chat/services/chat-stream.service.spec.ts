@@ -558,6 +558,49 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
     expect(updatedThread?.pendingLearningGeneration).toBeUndefined();
   });
 
+  it('regenerates a quiz with the same parameters after refais pareil (LEARN-09c)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const generateSpy = jest.spyOn(learningSessionsService, 'generate');
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '1'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '5'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+
+    const firstCall = generateSpy.mock.calls[0];
+    expect(firstCall).toBeDefined();
+
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'refais pareil'),
+    );
+
+    expect(generateSpy).toHaveBeenCalledTimes(2);
+    expect(generateSpy.mock.calls[1]).toEqual(firstCall);
+
+    expect(
+      events.some(
+        (event) =>
+          event.event === 'text_delta' &&
+          event.data.delta.includes('relance le même quiz'),
+      ),
+    ).toBe(true);
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain('Ton quiz est prêt');
+    expect(events.some((event) => event.event === 'learning_session_created')).toBe(true);
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.lastLearningGenerationRequest).toMatchObject({
+      type: 'quiz',
+      itemCount: 5,
+      selectedFocusAreaIds: expect.arrayContaining([expect.any(String)]),
+    });
+  });
+
   it('creates flashcards session from chat and emits learning_session_created SSE', async () => {
     await finalizeUserWithProfile();
     await seedReadyActiveDocumentWithChunk();

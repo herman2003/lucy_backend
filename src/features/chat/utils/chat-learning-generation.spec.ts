@@ -1,6 +1,7 @@
 import {
   buildLearningSessionCreatedReply,
   detectLearningGenerationIntent,
+  detectLearningRegenerationIntent,
   parseLearningItemCount,
 } from './chat-learning-generation';
 
@@ -21,6 +22,13 @@ describe('chat-learning-generation (LEARN-01d)', () => {
 
   it('returns null for normal tutoring questions', () => {
     expect(detectLearningGenerationIntent("Qu'est-ce que l'entropie ?")).toBeNull();
+  });
+
+  it('detects regeneration intent from common phrases (LEARN-09c)', () => {
+    expect(detectLearningRegenerationIntent('refais pareil')).toBe(true);
+    expect(detectLearningRegenerationIntent('same again please')).toBe(true);
+    expect(detectLearningRegenerationIntent('nochmal')).toBe(true);
+    expect(detectLearningGenerationIntent('refais pareil')).toBeNull();
   });
 
   it('parses optional item count from the message', () => {
