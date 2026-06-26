@@ -373,6 +373,17 @@ export class ChatStreamService {
     assistantText = `${analyzingText}\n\n${planText}`;
     options.onTextDelta?.(`\n\n${planText}`);
 
+    if (examDate) {
+      const revisionExamDate = new Date(
+        Date.UTC(
+          examDate.getUTCFullYear(),
+          examDate.getUTCMonth(),
+          examDate.getUTCDate(),
+        ),
+      ).toISOString();
+      await this.chatsRepository.patchThread(uid, chatId, { revisionExamDate });
+    }
+
     const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
       id: newMessageId(),
       role: 'assistant',

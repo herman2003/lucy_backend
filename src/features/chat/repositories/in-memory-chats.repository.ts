@@ -100,6 +100,7 @@ export class InMemoryChatsRepository implements ChatsRepository {
       pendingLearningGeneration?: PendingLearningGeneration | null;
       corpusStudyPlan?: CorpusStudyPlan | null;
       lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
+      revisionExamDate?: string | null;
     },
   ): Promise<void> {
     const thread = this.findThread(uid, chatId);
@@ -128,6 +129,13 @@ export class InMemoryChatsRepository implements ChatsRepository {
         delete thread.lastLearningGenerationRequest;
       } else {
         thread.lastLearningGenerationRequest = patch.lastLearningGenerationRequest;
+      }
+    }
+    if (patch.revisionExamDate !== undefined) {
+      if (patch.revisionExamDate === null) {
+        delete thread.revisionExamDate;
+      } else {
+        thread.revisionExamDate = patch.revisionExamDate;
       }
     }
     thread.updatedAt = new Date().toISOString();

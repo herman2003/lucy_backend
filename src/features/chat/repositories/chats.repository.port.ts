@@ -40,6 +40,7 @@ export interface ChatsRepository {
       pendingLearningGeneration?: PendingLearningGeneration | null;
       corpusStudyPlan?: CorpusStudyPlan | null;
       lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
+      revisionExamDate?: string | null;
     },
   ): Promise<void>;
 

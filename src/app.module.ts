@@ -12,6 +12,7 @@ import { RetrievalModule } from './features/retrieval/retrieval.module';
 import { ChatModule } from './features/chat/chat.module';
 import { QuizModule } from './features/quiz/quiz.module';
 import { LearningSessionsModule } from './features/learning-sessions/learning-sessions.module';
+import { RevisionRemindersModule } from './features/revision-reminders/revision-reminders.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -28,6 +29,7 @@ import { HealthController } from './health/health.controller';
     ChatModule,
     QuizModule,
     LearningSessionsModule,
+    RevisionRemindersModule,
   ],
   controllers: [HealthController],
 })

@@ -18,6 +18,7 @@ type FirestoreChatThreadData = {
   pendingLearningGeneration?: PendingLearningGeneration;
   corpusStudyPlan?: CorpusStudyPlan;
   lastLearningGenerationRequest?: LastLearningGenerationRequest;
+  revisionExamDate?: string;
 };
 
 type FirestoreChatMessageData = {
@@ -147,6 +148,7 @@ export class FirestoreChatsRepository implements ChatsRepository {
       pendingLearningGeneration?: PendingLearningGeneration | null;
       corpusStudyPlan?: CorpusStudyPlan | null;
       lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
+      revisionExamDate?: string | null;
     },
   ): Promise<void> {
     const threadRef = this.chatsCollection(uid).doc(chatId);
@@ -180,6 +182,13 @@ export class FirestoreChatsRepository implements ChatsRepository {
         updates.lastLearningGenerationRequest = admin.firestore.FieldValue.delete();
       } else {
         updates.lastLearningGenerationRequest = patch.lastLearningGenerationRequest;
+      }
+    }
+    if (patch.revisionExamDate !== undefined) {
+      if (patch.revisionExamDate === null) {
+        updates.revisionExamDate = admin.firestore.FieldValue.delete();
+      } else {
+        updates.revisionExamDate = patch.revisionExamDate;
       }
     }
     await threadRef.set(updates, { merge: true });
@@ -227,6 +236,9 @@ export class FirestoreChatsRepository implements ChatsRepository {
         : {}),
       ...(data.lastLearningGenerationRequest !== undefined
         ? { lastLearningGenerationRequest: data.lastLearningGenerationRequest }
+        : {}),
+      ...(data.revisionExamDate !== undefined
+        ? { revisionExamDate: data.revisionExamDate }
         : {}),
     };
   }

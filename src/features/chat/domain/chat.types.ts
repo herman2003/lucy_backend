@@ -26,6 +26,8 @@ export type PersistedChatThread = {
   pendingLearningGeneration?: PendingLearningGeneration;
   corpusStudyPlan?: CorpusStudyPlan;
   lastLearningGenerationRequest?: LastLearningGenerationRequest;
+  /** ISO date (UTC midnight) for J-N revision push reminders (LEARN-12a-V2). */
+  revisionExamDate?: string;
 };
 
 export type PersistedChatMessage = {
