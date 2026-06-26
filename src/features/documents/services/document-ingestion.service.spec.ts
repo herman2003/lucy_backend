@@ -84,6 +84,43 @@ describe('DocumentIngestionService', () => {
     throw new Error('Ingestion did not complete in time');
   }
 
+  it('persists document outline from headings during ingestion (LEARN-08a)', async () => {
+    const text = [
+      '# Chapitre 1 — Entropie',
+      '',
+      'Introduction sur l entropie.',
+      '',
+      '# Chapitre 2 — Enthalpie',
+      '',
+      'Suite du cours.',
+    ].join('\n');
+    const created = await documentsService.create(uid, {
+      title: 'Cours',
+      fileName: 'cours.md',
+      mimeType: 'text/markdown',
+      byteSize: Buffer.byteLength(text, 'utf8'),
+    });
+
+    const doc = await documentsRepository.getById(uid, created.id);
+    storage.__setObject(
+      doc!.storagePath,
+      doc!.byteSize,
+      'text/markdown',
+      Buffer.from(text, 'utf8'),
+    );
+
+    await documentsService.complete(uid, created.id);
+    await flushIngestion();
+
+    const ready = await documentsRepository.getById(uid, created.id);
+    expect(ready?.outline).toBeDefined();
+    expect(ready?.outline?.length).toBeGreaterThanOrEqual(2);
+    expect(ready?.outline?.[0]?.label).toContain('Entropie');
+
+    const detail = await documentsService.getById(uid, created.id);
+    expect(detail.outline?.[0]?.ordinalStart).toBe(0);
+  });
+
   it('ingests txt after complete → ready with chunkCount', async () => {
     const text = 'Premier paragraphe.\n\nDeuxième paragraphe avec plus de texte.';
     const created = await documentsService.create(uid, {

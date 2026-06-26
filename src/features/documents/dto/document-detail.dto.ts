@@ -1,3 +1,4 @@
+import type { DocumentOutlineEntry } from '../domain/document-outline.types';
 import type { DocumentStatus } from '../repositories/documents.repository.port';
 
 export type DocumentDetailDto = {
@@ -10,6 +11,7 @@ export type DocumentDetailDto = {
   searchEnabled: boolean;
   errorCode?: string;
   chunkCount?: number;
+  outline?: DocumentOutlineEntry[];
   createdAt: string;
   updatedAt: string;
 };

@@ -120,6 +120,7 @@ export class DocumentsService {
       searchEnabled: doc.searchEnabled,
       ...(doc.errorCode ? { errorCode: doc.errorCode } : {}),
       ...(doc.chunkCount !== undefined ? { chunkCount: doc.chunkCount } : {}),
+      ...(doc.outline !== undefined ? { outline: doc.outline } : {}),
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };

@@ -1,3 +1,5 @@
+import type { DocumentOutlineEntry } from '../domain/document-outline.types';
+
 export const DOCUMENTS_REPOSITORY = Symbol('DOCUMENTS_REPOSITORY');
 
 export type DocumentStatus = 'uploading' | 'processing' | 'ready' | 'failed';
@@ -15,6 +17,7 @@ export type PersistedDocument = {
   errorCode?: string;
   chunkCount?: number;
   pageCount?: number;
+  outline?: DocumentOutlineEntry[];
   ingestionAttempts?: number;
   createdAt: string;
   updatedAt: string;
@@ -41,7 +44,7 @@ export type DocumentsRepository = {
   markIngestionSuccess(
     uid: string,
     id: string,
-    input: { chunkCount: number; pageCount?: number },
+    input: { chunkCount: number; pageCount?: number; outline?: DocumentOutlineEntry[] },
   ): Promise<void>;
   markIngestionFailed(uid: string, id: string, errorCode: string): Promise<void>;
   incrementIngestionAttempts(uid: string, id: string): Promise<number>;

@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { InMemoryDocumentsStorage } from '../storage/in-memory-documents.storage';
 import { DOCUMENTS_STORAGE, type DocumentsStorage } from '../storage/documents-storage.port';
 import { buildDocumentStoragePath } from '../utils/document-file.util';
+import type { DocumentOutlineEntry } from '../domain/document-outline.types';
 import {
   DOCUMENT_CHUNKS_REPOSITORY,
   type DocumentChunksRepository,
@@ -160,7 +161,7 @@ export class InMemoryDocumentsRepository implements DocumentsRepository {
   async markIngestionSuccess(
     uid: string,
     id: string,
-    input: { chunkCount: number; pageCount?: number },
+    input: { chunkCount: number; pageCount?: number; outline?: DocumentOutlineEntry[] },
   ): Promise<void> {
     const doc = this.findDoc(uid, id);
     if (!doc) {
@@ -169,6 +170,11 @@ export class InMemoryDocumentsRepository implements DocumentsRepository {
     doc.status = 'ready';
     doc.chunkCount = input.chunkCount;
     doc.pageCount = input.pageCount;
+    if (input.outline !== undefined) {
+      doc.outline = input.outline;
+    } else {
+      delete doc.outline;
+    }
     doc.errorCode = undefined;
     doc.updatedAt = new Date().toISOString();
   }
