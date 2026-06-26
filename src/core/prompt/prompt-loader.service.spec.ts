@@ -117,4 +117,23 @@ describe('PromptLoaderService', () => {
     expect(system).toContain('intermediate');
     expect(system).not.toContain('{{');
   });
+
+  it('includes definition and conceptual link guidance in quiz generation (LEARN-09d)', () => {
+    const system = service.getQuizGeneratorSystemPrompt(CHAT_TUTOR_PROFILE_FIXTURE, 5);
+
+    expect(system.toLowerCase()).toContain('definition');
+    expect(system.toLowerCase()).toMatch(/link|relate|relationship/);
+    expect(system.toLowerCase()).toMatch(/isolated|standalone/);
+  });
+
+  it('includes definition and conceptual link guidance in flashcards generation (LEARN-09d)', () => {
+    const system = service.getFlashcardsGeneratorSystemPrompt(
+      CHAT_TUTOR_PROFILE_FIXTURE,
+      10,
+    );
+
+    expect(system.toLowerCase()).toContain('definition');
+    expect(system.toLowerCase()).toMatch(/link|relate|relationship/);
+    expect(system.toLowerCase()).toMatch(/disconnected|isolated|standalone/);
+  });
 });
