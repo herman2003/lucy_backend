@@ -80,3 +80,51 @@ export const FLASHCARDS_GENERATION_JSON_SCHEMA = {
     },
   },
 } as const;
+
+export const CORPUS_STUDY_ANALYSIS_JSON_SCHEMA = {
+  type: 'object',
+  required: ['focusAreas'],
+  properties: {
+    focusAreas: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: [
+          'documentId',
+          'label',
+          'ordinalStart',
+          'ordinalEnd',
+          'importance',
+          'rationale',
+          'keyConcepts',
+        ],
+        properties: {
+          id: { type: 'string' },
+          documentId: { type: 'string' },
+          label: { type: 'string' },
+          ordinalStart: { type: 'integer' },
+          ordinalEnd: { type: 'integer' },
+          pageStart: { type: 'integer' },
+          pageEnd: { type: 'integer' },
+          importance: { type: 'string', enum: ['high', 'medium'] },
+          rationale: { type: 'string' },
+          keyConcepts: {
+            type: 'array',
+            items: { type: 'string' },
+            minItems: 1,
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+export const CORPUS_STUDY_SAMPLE_QUERIES = [
+  'Key concepts definitions introduction overview',
+  'Important theorems examples applications',
+  'Core ideas for memorization and exam preparation',
+] as const;
+
+export const CORPUS_STUDY_MAX_EXCERPTS = 30;
+
+export const CORPUS_STUDY_PLAN_TTL_MS = 24 * 60 * 60 * 1000;

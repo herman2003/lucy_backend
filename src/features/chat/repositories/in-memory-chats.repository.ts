@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 
 import type { PersistedChatMessage, PersistedChatThread } from '../domain/chat.types';
+import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
+import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import type {
   ChatsRepository,
   ListChatMessagesOptions,
@@ -92,7 +94,11 @@ export class InMemoryChatsRepository implements ChatsRepository {
   async patchThread(
     uid: string,
     chatId: string,
-    patch: { title?: string },
+    patch: {
+      title?: string;
+      pendingLearningGeneration?: PendingLearningGeneration | null;
+      corpusStudyPlan?: CorpusStudyPlan | null;
+    },
   ): Promise<void> {
     const thread = this.findThread(uid, chatId);
     if (!thread) {
@@ -100,6 +106,20 @@ export class InMemoryChatsRepository implements ChatsRepository {
     }
     if (patch.title !== undefined) {
       thread.title = patch.title;
+    }
+    if (patch.pendingLearningGeneration !== undefined) {
+      if (patch.pendingLearningGeneration === null) {
+        delete thread.pendingLearningGeneration;
+      } else {
+        thread.pendingLearningGeneration = patch.pendingLearningGeneration;
+      }
+    }
+    if (patch.corpusStudyPlan !== undefined) {
+      if (patch.corpusStudyPlan === null) {
+        delete thread.corpusStudyPlan;
+      } else {
+        thread.corpusStudyPlan = patch.corpusStudyPlan;
+      }
     }
     thread.updatedAt = new Date().toISOString();
   }

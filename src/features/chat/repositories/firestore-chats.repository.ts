@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 
 import type { PersistedChatMessage, PersistedChatThread } from '../domain/chat.types';
+import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
+import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import type {
   ChatsRepository,
   ListChatMessagesOptions,
@@ -12,6 +14,8 @@ type FirestoreChatThreadData = {
   createdAt: string;
   updatedAt: string;
   lastMessagePreview?: string;
+  pendingLearningGeneration?: PendingLearningGeneration;
+  corpusStudyPlan?: CorpusStudyPlan;
 };
 
 type FirestoreChatMessageData = {
@@ -136,7 +140,11 @@ export class FirestoreChatsRepository implements ChatsRepository {
   async patchThread(
     uid: string,
     chatId: string,
-    patch: { title?: string },
+    patch: {
+      title?: string;
+      pendingLearningGeneration?: PendingLearningGeneration | null;
+      corpusStudyPlan?: CorpusStudyPlan | null;
+    },
   ): Promise<void> {
     const threadRef = this.chatsCollection(uid).doc(chatId);
     const threadSnap = await threadRef.get();
@@ -144,11 +152,25 @@ export class FirestoreChatsRepository implements ChatsRepository {
       throw new Error(`Chat thread not found: ${chatId}`);
     }
 
-    const updates: Partial<FirestoreChatThreadData> = {
+    const updates: Record<string, unknown> = {
       updatedAt: new Date().toISOString(),
     };
     if (patch.title !== undefined) {
       updates.title = patch.title;
+    }
+    if (patch.pendingLearningGeneration !== undefined) {
+      if (patch.pendingLearningGeneration === null) {
+        updates.pendingLearningGeneration = admin.firestore.FieldValue.delete();
+      } else {
+        updates.pendingLearningGeneration = patch.pendingLearningGeneration;
+      }
+    }
+    if (patch.corpusStudyPlan !== undefined) {
+      if (patch.corpusStudyPlan === null) {
+        updates.corpusStudyPlan = admin.firestore.FieldValue.delete();
+      } else {
+        updates.corpusStudyPlan = patch.corpusStudyPlan;
+      }
     }
     await threadRef.set(updates, { merge: true });
   }
@@ -186,6 +208,12 @@ export class FirestoreChatsRepository implements ChatsRepository {
       updatedAt: data.updatedAt,
       ...(data.lastMessagePreview !== undefined
         ? { lastMessagePreview: data.lastMessagePreview }
+        : {}),
+      ...(data.pendingLearningGeneration !== undefined
+        ? { pendingLearningGeneration: data.pendingLearningGeneration }
+        : {}),
+      ...(data.corpusStudyPlan !== undefined
+        ? { corpusStudyPlan: data.corpusStudyPlan }
         : {}),
     };
   }

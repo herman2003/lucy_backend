@@ -1,3 +1,6 @@
+import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
+import type { PendingLearningGeneration } from './pending-learning-generation.types';
+
 export type ChatMessageRole = 'user' | 'assistant';
 
 export type ChatMessageStatus = 'completed' | 'failed';
@@ -19,6 +22,8 @@ export type PersistedChatThread = {
   createdAt: string;
   updatedAt: string;
   lastMessagePreview?: string;
+  pendingLearningGeneration?: PendingLearningGeneration;
+  corpusStudyPlan?: CorpusStudyPlan;
 };
 
 export type PersistedChatMessage = {

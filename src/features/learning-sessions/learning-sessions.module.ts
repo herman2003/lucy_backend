@@ -11,12 +11,14 @@ import { FirestoreLearningSessionsRepository } from './repositories/firestore-le
 import { InMemoryLearningSessionsRepository } from './repositories/in-memory-learning-sessions.repository';
 import { LEARNING_SESSIONS_REPOSITORY } from './repositories/learning-sessions.repository.port';
 import { LearningSessionsService } from './services/learning-sessions.service';
+import { CorpusStudyAnalyzerService } from './services/corpus-study-analyzer.service';
 
 @Module({
   imports: [forwardRef(() => ChatModule), RetrievalModule, LlmModule, PromptModule],
   controllers: [LearningSessionsController],
   providers: [
     LearningSessionsService,
+    CorpusStudyAnalyzerService,
     InMemoryLearningSessionsRepository,
     FirestoreLearningSessionsRepository,
     {
@@ -33,6 +35,6 @@ import { LearningSessionsService } from './services/learning-sessions.service';
       ],
     },
   ],
-  exports: [LearningSessionsService, LEARNING_SESSIONS_REPOSITORY],
+  exports: [LearningSessionsService, CorpusStudyAnalyzerService, LEARNING_SESSIONS_REPOSITORY],
 })
 export class LearningSessionsModule {}

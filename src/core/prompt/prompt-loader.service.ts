@@ -25,6 +25,7 @@ export class PromptLoaderService implements OnModuleInit {
   private chatTutorSystemTemplate = '';
   private quizGeneratorSystemTemplate = '';
   private flashcardsGeneratorSystemTemplate = '';
+  private corpusStudyAnalyzerSystemTemplate = '';
 
   onModuleInit(): void {
     const promptsRoot = this.resolvePromptsRoot();
@@ -56,6 +57,10 @@ export class PromptLoaderService implements OnModuleInit {
       join(promptsRoot, 'flashcards-generator.system.hbs'),
       'utf8',
     );
+    this.corpusStudyAnalyzerSystemTemplate = readFileSync(
+      join(promptsRoot, 'corpus-study-analyzer.system.hbs'),
+      'utf8',
+    );
   }
 
   getQuizGeneratorSystemPrompt(
@@ -79,6 +84,16 @@ export class PromptLoaderService implements OnModuleInit {
       tutoring_language: learnerProfile.tutoring_language,
       explanation_style: learnerProfile.explanation_style,
       feedback_tone: learnerProfile.feedback_tone,
+    });
+  }
+
+  getCorpusStudyAnalyzerSystemPrompt(learnerProfile: LearnerProfile): string {
+    return renderHandlebarsTemplate(this.corpusStudyAnalyzerSystemTemplate, {
+      tutoring_language: learnerProfile.tutoring_language,
+      explanation_style: learnerProfile.explanation_style,
+      feedback_tone: learnerProfile.feedback_tone,
+      learning_goal: learnerProfile.learning_goal,
+      self_assessed_level: learnerProfile.self_assessed_level,
     });
   }
 

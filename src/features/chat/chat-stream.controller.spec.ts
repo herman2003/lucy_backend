@@ -19,6 +19,7 @@ import { DOCUMENTS_STORAGE } from '../documents/storage/documents-storage.port';
 import { InMemoryDocumentsStorage } from '../documents/storage/in-memory-documents.storage';
 import { InMemoryOnboardingUsersRepository } from '../onboarding/repositories/in-memory-onboarding-user.repository';
 import { RetrievalService } from '../retrieval/services/retrieval.service';
+import { CorpusStudyAnalyzerService } from '../learning-sessions/services/corpus-study-analyzer.service';
 import { LearningSessionsService } from '../learning-sessions/services/learning-sessions.service';
 import { InMemoryLearningSessionsRepository } from '../learning-sessions/repositories/in-memory-learning-sessions.repository';
 import { LEARNING_SESSIONS_REPOSITORY } from '../learning-sessions/repositories/learning-sessions.repository.port';
@@ -64,6 +65,7 @@ describe('ChatController stream (CHAT-05/06)', () => {
         ChatActiveStreamRegistry,
         ChatPrerequisitesService,
         RetrievalService,
+        CorpusStudyAnalyzerService,
         LearningSessionsService,
         InMemoryLearningSessionsRepository,
         {

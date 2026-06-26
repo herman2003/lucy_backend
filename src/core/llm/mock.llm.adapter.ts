@@ -37,7 +37,43 @@ export class MockLlmAdapter implements LlmPort {
     if (this.isQuizGenerationRequest(input)) {
       return this.buildQuizGenerationResponse(input.userPrompt);
     }
+    if (this.isCorpusStudyAnalysisRequest(input)) {
+      return this.buildCorpusStudyAnalysisResponse(input.userPrompt);
+    }
     return this.buildValidateResponse(input.userPrompt);
+  }
+
+  private isCorpusStudyAnalysisRequest(input: LlmStructuredRequest): boolean {
+    return input.userPrompt.includes('CORPUS_STUDY_ANALYSIS=true');
+  }
+
+  private buildCorpusStudyAnalysisResponse(
+    userPrompt: string,
+  ): LlmStructuredResponse {
+    const documentIdMatch = userPrompt.match(/documentId=([^\s\]]+)/);
+    const documentId = documentIdMatch?.[1] ?? 'doc_mock_1';
+    const titleMatch = userPrompt.match(
+      /"title":"([^"]+)"/,
+    );
+    const title = titleMatch?.[1] ?? 'Cours mock';
+
+    const payload = {
+      focusAreas: [
+        {
+          id: 'focus_1',
+          documentId,
+          label: 'Partie essentielle — concepts clés',
+          ordinalStart: 0,
+          ordinalEnd: 0,
+          pageStart: 1,
+          pageEnd: 1,
+          importance: 'high',
+          rationale: 'Fondations indispensables pour la suite du cours.',
+          keyConcepts: ['concept clé', 'définition'],
+        },
+      ],
+    };
+    return { rawText: JSON.stringify(payload), parsedJson: payload };
   }
 
   private isFlashcardsGenerationRequest(input: LlmStructuredRequest): boolean {

@@ -6,6 +6,7 @@ import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
 import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
 import type { PersistedLearningSession } from '../../learning-sessions/domain/learning-session.types';
+import { CorpusStudyAnalyzerService } from '../../learning-sessions/services/corpus-study-analyzer.service';
 import { LearningSessionsService } from '../../learning-sessions/services/learning-sessions.service';
 import { RetrievalService } from '../../retrieval/services/retrieval.service';
 import {
@@ -14,9 +15,15 @@ import {
 } from '../chat.constants';
 import {
   buildLearningSessionCreatedReply,
-  detectLearningGenerationIntent,
-  parseLearningItemCount,
 } from '../utils/chat-learning-generation';
+import {
+  buildFocusSelectionMessage,
+  buildLearningAnalyzingMessage,
+  buildLearningGeneratingMessage,
+  buildTopicFallbackPrompt,
+} from '../utils/chat-learning-dialogue-messages';
+import { processLearningDialogueTurn } from '../utils/chat-learning-dialogue';
+import { getValidCorpusStudyPlan } from '../utils/corpus-study-plan-cache';
 import { buildOffCorpusAssistantReply } from '../utils/chat-off-corpus-reply';
 import {
   filterRetrievalHitsForChat,
@@ -70,6 +77,8 @@ export class ChatStreamService {
     private readonly activeStreams: ChatActiveStreamRegistry,
     @Inject(forwardRef(() => LearningSessionsService))
     private readonly learningSessionsService: LearningSessionsService,
+    @Inject(forwardRef(() => CorpusStudyAnalyzerService))
+    private readonly corpusStudyAnalyzer: CorpusStudyAnalyzerService,
     @Inject(LLM_STREAMING_PORT)
     private readonly llmStreaming: LlmStreamingPort,
   ) {}
@@ -271,16 +280,66 @@ export class ChatStreamService {
     turn: TurnContext,
     options: CompleteTurnOptions,
   ): Promise<CompleteTurnResult | null> {
-    const intent = detectLearningGenerationIntent(content);
-    if (!intent) {
+    const outcome = processLearningDialogueTurn({
+      message: content,
+      pending: turn.thread.pendingLearningGeneration,
+      tutoringLanguage: turn.learnerProfile.tutoring_language,
+      corpusStudyPlan: turn.thread.corpusStudyPlan,
+    });
+    if (!outcome) {
       return null;
     }
 
-    const parsedCount = parseLearningItemCount(content);
+    if (outcome.kind === 'needs_analysis') {
+      return this.completeCorpusAnalysisTurn(
+        uid,
+        chatId,
+        content,
+        turn,
+        outcome.pending,
+        options,
+      );
+    }
+
+    if (outcome.kind === 'assistant_reply') {
+      options.onTextDelta?.(outcome.text);
+      await this.chatsRepository.patchThread(uid, chatId, {
+        pendingLearningGeneration: outcome.pending,
+      });
+
+      const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+        id: newMessageId(),
+        role: 'assistant',
+        content: outcome.text,
+        createdAt: new Date().toISOString(),
+        status: 'completed',
+        sources: [],
+      });
+
+      if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {
+        await this.chatsRepository.patchThread(uid, chatId, {
+          title: buildAutoTitle(content),
+        });
+      }
+
+      return { assistantMessage, sources: [] };
+    }
+
+    const generatingText = buildLearningGeneratingMessage(
+      turn.learnerProfile.tutoring_language,
+      outcome.type,
+    );
+    options.onTextDelta?.(generatingText);
+
+    await this.chatsRepository.patchThread(uid, chatId, {
+      pendingLearningGeneration: null,
+    });
+
     const session = await this.learningSessionsService.generate(uid, {
-      type: intent,
-      ...(parsedCount !== undefined ? { itemCount: parsedCount } : {}),
+      type: outcome.type,
+      itemCount: outcome.itemCount,
       sourceChatId: chatId,
+      ...(outcome.topicHint !== undefined ? { topicHint: outcome.topicHint } : {}),
     });
 
     const assistantText = buildLearningSessionCreatedReply(
@@ -310,6 +369,100 @@ export class ChatStreamService {
       sources: [],
       learningSession: session,
     };
+  }
+
+  private async completeCorpusAnalysisTurn(
+    uid: string,
+    chatId: string,
+    content: string,
+    turn: TurnContext,
+    pending: NonNullable<PersistedChatThread['pendingLearningGeneration']>,
+    options: CompleteTurnOptions,
+  ): Promise<CompleteTurnResult> {
+    const tutoringLanguage = turn.learnerProfile.tutoring_language;
+    const analyzingText = buildLearningAnalyzingMessage(tutoringLanguage);
+    options.onTextDelta?.(analyzingText);
+
+    await this.chatsRepository.patchThread(uid, chatId, {
+      pendingLearningGeneration: pending,
+    });
+
+    let corpusStudyPlan = getValidCorpusStudyPlan(turn.thread.corpusStudyPlan);
+    let assistantText = analyzingText;
+
+    if (!corpusStudyPlan) {
+      try {
+        corpusStudyPlan = await this.corpusStudyAnalyzer.analyze(uid);
+        await this.chatsRepository.patchThread(uid, chatId, {
+          corpusStudyPlan,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `corpus study analysis failed chatId=${chatId}: ${formatStreamErrorCause(error)}`,
+        );
+        const fallbackText = buildTopicFallbackPrompt(tutoringLanguage, pending.type);
+        assistantText = `${analyzingText}\n\n${fallbackText}`;
+        options.onTextDelta?.(`\n\n${fallbackText}`);
+
+        await this.chatsRepository.patchThread(uid, chatId, {
+          pendingLearningGeneration: {
+            ...pending,
+            step: 'awaiting_topic_fallback',
+            updatedAt: new Date().toISOString(),
+          },
+        });
+
+        const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+          id: newMessageId(),
+          role: 'assistant',
+          content: assistantText,
+          createdAt: new Date().toISOString(),
+          status: 'completed',
+          sources: [],
+        });
+
+        if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {
+          await this.chatsRepository.patchThread(uid, chatId, {
+            title: buildAutoTitle(content),
+          });
+        }
+
+        return { assistantMessage, sources: [] };
+      }
+    }
+
+    const focusText = buildFocusSelectionMessage(
+      tutoringLanguage,
+      corpusStudyPlan,
+      pending.type,
+    );
+    assistantText = `${analyzingText}\n\n${focusText}`;
+    options.onTextDelta?.(`\n\n${focusText}`);
+
+    await this.chatsRepository.patchThread(uid, chatId, {
+      pendingLearningGeneration: {
+        ...pending,
+        step: 'awaiting_focus_selection',
+        updatedAt: new Date().toISOString(),
+      },
+    });
+
+    const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+      id: newMessageId(),
+      role: 'assistant',
+      content: assistantText,
+      createdAt: new Date().toISOString(),
+      status: 'completed',
+      sources: [],
+    });
+
+    if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {
+      await this.chatsRepository.patchThread(uid, chatId, {
+        title: buildAutoTitle(content),
+      });
+    }
+
+    return { assistantMessage, sources: [] };
   }
 
   private async requireThread(uid: string, chatId: string): Promise<PersistedChatThread> {
