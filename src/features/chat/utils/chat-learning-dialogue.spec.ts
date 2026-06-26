@@ -96,6 +96,29 @@ describe('chat-learning-dialogue (LEARN-06)', () => {
     });
   });
 
+  it('preserves selectedFocusAreaIds when moving to launch recap', () => {
+    const outcome = processLearningDialogueTurn({
+      message: '5',
+      pending: {
+        type: 'quiz',
+        step: 'awaiting_count',
+        selectedFocusAreaIds: ['focus_1'],
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'assistant_reply',
+      pending: {
+        step: 'awaiting_launch_confirm',
+        itemCount: 5,
+        selectedFocusAreaIds: ['focus_1'],
+      },
+    });
+  });
+
   it('generates only after launch confirmation', () => {
     const outcome = processLearningDialogueTurn({
       message: 'oui',

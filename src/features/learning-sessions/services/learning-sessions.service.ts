@@ -7,15 +7,14 @@ import { LucyApiError } from '../../../core/errors/lucy-api.error';
 import { PromptLoaderService } from '../../../core/prompt/prompt-loader.service';
 import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
 import type { SearchRetrievalHitDto } from '../../retrieval/dto/search-retrieval.dto';
+import { MAX_RETRIEVAL_LIMIT } from '../../retrieval/dto/search-retrieval.dto';
 import { RetrievalService } from '../../retrieval/services/retrieval.service';
 import { ChatPrerequisitesService } from '../../chat/services/chat-prerequisites.service';
 import type { GenerateLearningSessionInput } from '../dto/generate-learning-session.dto';
 import { parseGenerateLearningSessionRequest } from '../dto/generate-learning-session.dto';
 import {
   FLASHCARDS_GENERATION_JSON_SCHEMA,
-  FLASHCARDS_RETRIEVAL_QUERY,
   QUIZ_GENERATION_JSON_SCHEMA,
-  QUIZ_RETRIEVAL_QUERY,
   flashcardsRetrievalLimit,
   quizRetrievalLimit,
 } from '../dto/learning-session.constants';
@@ -31,6 +30,11 @@ import {
 } from '../repositories/learning-sessions.repository.port';
 import { parseGeneratedFlashcardItems } from '../validators/generated-flashcards.validator';
 import { parseGeneratedQuizItems } from '../validators/generated-quiz.validator';
+import {
+  buildFocusScopedRetrievalQuery,
+  documentIdsFromFocusAreas,
+  filterHitsByFocusAreas,
+} from '../utils/focus-scoped-retrieval';
 
 const QUIZ_GENERATION_USER_MARKER = 'GENERATE_QUIZ_ITEMS=true';
 const FLASHCARDS_GENERATION_USER_MARKER = 'GENERATE_FLASHCARD_ITEMS=true';
@@ -85,10 +89,7 @@ export class LearningSessionsService {
     const learnerProfile = await this.requireLearnerProfile(uid);
     const eligibility = await this.chatPrerequisites.getEligibility(uid);
 
-    const hits = await this.retrievalService.search(uid, {
-      query: retrievalQueryForType(input.type),
-      limit: retrievalLimitForType(input.type, input.itemCount),
-    });
+    const hits = await this.retrieveGenerationHits(uid, input);
     if (hits.length === 0) {
       this.logger.warn(
         `learning generation skipped uid=${uid} type=${input.type}: no retrieval hits`,
@@ -119,6 +120,44 @@ export class LearningSessionsService {
         : {}),
       items,
     });
+  }
+
+  private async retrieveGenerationHits(
+    uid: string,
+    input: GenerateLearningSessionInput,
+  ): Promise<SearchRetrievalHitDto[]> {
+    const query = buildFocusScopedRetrievalQuery(
+      input.type,
+      input.focusAreas,
+      input.topicHint,
+    );
+    const documentIds =
+      input.focusAreas !== undefined && input.focusAreas.length > 0
+        ? documentIdsFromFocusAreas(input.focusAreas)
+        : undefined;
+    const limit = retrievalLimitForType(input.type, input.itemCount);
+
+    let hits = await this.retrievalService.search(uid, {
+      query,
+      limit,
+      ...(documentIds !== undefined ? { documentIds } : {}),
+    });
+
+    if (input.focusAreas !== undefined && input.focusAreas.length > 0) {
+      hits = filterHitsByFocusAreas(hits, input.focusAreas);
+      if (hits.length === 0) {
+        hits = filterHitsByFocusAreas(
+          await this.retrievalService.search(uid, {
+            query,
+            limit: MAX_RETRIEVAL_LIMIT,
+            documentIds,
+          }),
+          input.focusAreas,
+        );
+      }
+    }
+
+    return hits;
   }
 
   private async assertActiveDocuments(uid: string): Promise<void> {
@@ -228,10 +267,6 @@ export class LearningSessionsService {
       failureMessage,
     );
   }
-}
-
-function retrievalQueryForType(type: LearningSessionType): string {
-  return type === 'quiz' ? QUIZ_RETRIEVAL_QUERY : FLASHCARDS_RETRIEVAL_QUERY;
 }
 
 function retrievalLimitForType(type: LearningSessionType, itemCount: number): number {

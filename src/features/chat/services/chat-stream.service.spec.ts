@@ -436,6 +436,12 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
       type: 'quiz',
       itemCount: 5,
       sourceChatId: thread.id,
+      focusAreas: expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.any(String),
+          documentId: expect.any(String),
+        }),
+      ]),
     });
 
     const createdEvent = events.find(
@@ -475,6 +481,12 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
       type: 'flashcards',
       itemCount: 10,
       sourceChatId: thread.id,
+      focusAreas: expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.any(String),
+          documentId: expect.any(String),
+        }),
+      ]),
     });
 
     const createdEvent = events.find(

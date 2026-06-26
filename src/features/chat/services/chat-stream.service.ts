@@ -24,6 +24,7 @@ import {
 } from '../utils/chat-learning-dialogue-messages';
 import { processLearningDialogueTurn } from '../utils/chat-learning-dialogue';
 import { getValidCorpusStudyPlan } from '../utils/corpus-study-plan-cache';
+import { resolveSelectedFocusAreas } from '../../learning-sessions/utils/focus-scoped-retrieval';
 import { buildOffCorpusAssistantReply } from '../utils/chat-off-corpus-reply';
 import {
   filterRetrievalHitsForChat,
@@ -335,11 +336,18 @@ export class ChatStreamService {
       pendingLearningGeneration: null,
     });
 
+    const latestThread = await this.chatsRepository.getThread(uid, chatId);
+    const focusAreas = resolveSelectedFocusAreas(
+      latestThread?.corpusStudyPlan,
+      outcome.selectedFocusAreaIds,
+    );
+
     const session = await this.learningSessionsService.generate(uid, {
       type: outcome.type,
       itemCount: outcome.itemCount,
       sourceChatId: chatId,
       ...(outcome.topicHint !== undefined ? { topicHint: outcome.topicHint } : {}),
+      ...(focusAreas.length > 0 ? { focusAreas } : {}),
     });
 
     const assistantText = buildLearningSessionCreatedReply(

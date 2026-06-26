@@ -36,6 +36,7 @@ const validProfile = {
 
 describe('LearningSessionsService (LEARN-01b)', () => {
   let service: LearningSessionsService;
+  let retrievalService: RetrievalService;
   let onboardingRepo: InMemoryOnboardingUsersRepository;
   let documentsRepo: InMemoryDocumentsRepository;
   let chunksRepo: InMemoryDocumentChunksRepository;
@@ -84,6 +85,7 @@ describe('LearningSessionsService (LEARN-01b)', () => {
       .compile();
 
     service = moduleRef.get(LearningSessionsService);
+    retrievalService = moduleRef.get(RetrievalService);
     documentsRepo = moduleRef.get(InMemoryDocumentsRepository);
     chunksRepo = moduleRef.get(InMemoryDocumentChunksRepository);
     moduleRef.get(PromptLoaderService).onModuleInit();
@@ -115,6 +117,74 @@ describe('LearningSessionsService (LEARN-01b)', () => {
       },
     ]);
   }
+
+  async function seedReadyActiveDocumentWithTwoChunks(): Promise<string> {
+    const doc = await documentsRepo.create(uid, {
+      title: 'Thermo',
+      fileName: 't.txt',
+      mimeType: 'text/plain',
+      byteSize: 10,
+    });
+    await documentsRepo.updateStatus(uid, doc.id, 'ready');
+    await documentsRepo.setSearchEnabled(uid, doc.id, true);
+    await chunksRepo.replaceChunks(uid, doc.id, [
+      {
+        id: 'chunk_0',
+        ordinal: 0,
+        text: 'La entropie augmente dans un système isolé.',
+        tokenEstimate: 12,
+        pageStart: 1,
+        pageEnd: 1,
+        embedding: Array.from({ length: 768 }, () => 0.01),
+      },
+      {
+        id: 'chunk_1',
+        ordinal: 1,
+        text: "L'enthalpie mesure l'énergie interne plus la pression fois le volume.",
+        tokenEstimate: 14,
+        pageStart: 2,
+        pageEnd: 2,
+        embedding: Array.from({ length: 768 }, () => 0.02),
+      },
+    ]);
+    return doc.id;
+  }
+
+  it('scopes quiz generation retrieval to selected focus areas (LEARN-07d)', async () => {
+    await finalizeUserWithProfile();
+    const documentId = await seedReadyActiveDocumentWithTwoChunks();
+    const searchSpy = jest.spyOn(retrievalService, 'search');
+
+    const session = await service.generate(uid, {
+      type: 'quiz',
+      itemCount: 5,
+      focusAreas: [
+        {
+          id: 'focus_1',
+          documentId,
+          documentTitle: 'Thermo',
+          label: 'Entropie',
+          ordinalStart: 0,
+          ordinalEnd: 0,
+          importance: 'high',
+          rationale: 'Concept central du cours.',
+          keyConcepts: ['entropie'],
+        },
+      ],
+    });
+
+    expect(searchSpy).toHaveBeenCalledWith(
+      uid,
+      expect.objectContaining({
+        documentIds: [documentId],
+        query: expect.stringContaining('entropie'),
+      }),
+    );
+    expect(session.items).toHaveLength(5);
+    for (const item of session.items) {
+      expect(item.sources.every((source) => source.chunkId === 'chunk_0')).toBe(true);
+    }
+  });
 
   it('generates a ready quiz session with 5 default items', async () => {
     await finalizeUserWithProfile();

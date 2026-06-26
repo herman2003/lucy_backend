@@ -40,6 +40,46 @@ describe('parseGenerateLearningSessionRequest (LEARN-01a)', () => {
     });
   });
 
+  it('accepts optional topicHint and focusAreas (LEARN-07d)', () => {
+    expect(
+      parseGenerateLearningSessionRequest({
+        type: 'quiz',
+        itemCount: 5,
+        topicHint: 'entropie',
+        focusAreas: [
+          {
+            id: 'focus_1',
+            documentId: 'doc_1',
+            documentTitle: 'Thermo',
+            label: 'Chapitre entropie',
+            ordinalStart: 0,
+            ordinalEnd: 2,
+            importance: 'high',
+            rationale: 'Concept central.',
+            keyConcepts: ['entropie'],
+          },
+        ],
+      }),
+    ).toEqual({
+      type: 'quiz',
+      itemCount: 5,
+      topicHint: 'entropie',
+      focusAreas: [
+        {
+          id: 'focus_1',
+          documentId: 'doc_1',
+          documentTitle: 'Thermo',
+          label: 'Chapitre entropie',
+          ordinalStart: 0,
+          ordinalEnd: 2,
+          importance: 'high',
+          rationale: 'Concept central.',
+          keyConcepts: ['entropie'],
+        },
+      ],
+    });
+  });
+
   it('rejects invalid type', () => {
     expect(() =>
       parseGenerateLearningSessionRequest({ type: 'exam' }),

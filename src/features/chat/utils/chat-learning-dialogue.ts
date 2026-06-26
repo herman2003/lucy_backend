@@ -292,6 +292,7 @@ function advancePendingDialogue(
         kind: 'assistant_reply',
         text: buildLearningLaunchRecap(tutoringLanguage, type, itemCount),
         pending: {
+          ...pending,
           type,
           step: 'awaiting_launch_confirm',
           itemCount,
