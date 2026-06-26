@@ -130,22 +130,41 @@ export class ChatStreamService {
         },
       };
 
-      const deltas: string[] = [];
-      const { assistantMessage, sources, learningSession } = await this.completeTurn(
-        uid,
-        chatId,
-        content,
-        turn,
-        {
-          onTextDelta: (delta) => {
-            deltas.push(delta);
-          },
-        },
-      );
+      const pendingDeltas: string[] = [];
+      let turnDone = false;
+      let turnResult: CompleteTurnResult | undefined;
+      let turnError: unknown;
 
-      for (const delta of deltas) {
-        yield { event: 'text_delta', data: { delta } };
+      void this.completeTurn(uid, chatId, content, turn, {
+        onTextDelta: (delta) => {
+          pendingDeltas.push(delta);
+        },
+      })
+        .then((result) => {
+          turnResult = result;
+          turnDone = true;
+        })
+        .catch((error: unknown) => {
+          turnError = error;
+          turnDone = true;
+        });
+
+      while (!turnDone || pendingDeltas.length > 0) {
+        if (pendingDeltas.length > 0) {
+          const delta = pendingDeltas.shift()!;
+          yield { event: 'text_delta', data: { delta } };
+          continue;
+        }
+        if (!turnDone) {
+          await waitForNextEventLoopTick();
+        }
       }
+
+      if (turnError !== undefined) {
+        throw turnError;
+      }
+
+      const { assistantMessage, sources, learningSession } = turnResult!;
 
       if (learningSession) {
         yield {
@@ -524,4 +543,10 @@ function formatStreamErrorCause(error: unknown): string {
     return error.stack ?? error.message;
   }
   return String(error);
+}
+
+function waitForNextEventLoopTick(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
 }

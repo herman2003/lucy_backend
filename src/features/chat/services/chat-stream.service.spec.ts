@@ -55,6 +55,12 @@ async function collectSseEvents(
   return events;
 }
 
+function waitForNextEventLoopTick(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
 describe('ChatStreamService (CHAT-05)', () => {
   let streamService: ChatStreamService;
   let activeStreams: ChatActiveStreamRegistry;
@@ -371,6 +377,65 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
       step: 'awaiting_focus_selection',
     });
     expect(updatedThread?.corpusStudyPlan?.focusAreas.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('streams analyzing text before corpus analysis finishes (LEARN-06e)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+
+    let releaseAnalyze: (() => void) | undefined;
+    const analyzeGate = new Promise<void>((resolve) => {
+      releaseAnalyze = resolve;
+    });
+    jest.spyOn(corpusStudyAnalyzer, 'analyze').mockImplementation(async () => {
+      await analyzeGate;
+      return {
+        generatedAt: '2026-06-10T12:00:00.000Z',
+        expiresAt: '2026-06-11T12:00:00.000Z',
+        focusAreas: [
+          {
+            id: 'focus_1',
+            documentId: 'doc_mock',
+            documentTitle: 'Thermo',
+            label: 'Partie essentielle',
+            ordinalStart: 0,
+            ordinalEnd: 0,
+            importance: 'high' as const,
+            rationale: 'Base du cours.',
+            keyConcepts: ['entropie'],
+          },
+        ],
+      };
+    });
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+
+    const events: ChatSseEvent[] = [];
+    let sawAnalyzingDeltaBeforeDone = false;
+    const stream = streamService.streamMessage(uid, thread.id, 'oui');
+    const collector = (async () => {
+      for await (const event of stream) {
+        events.push(event);
+        if (
+          event.event === 'text_delta' &&
+          event.data.delta.includes('Je parcours tes documents')
+        ) {
+          sawAnalyzingDeltaBeforeDone = true;
+        }
+      }
+    })();
+
+    await waitForNextEventLoopTick();
+    await waitForNextEventLoopTick();
+    expect(sawAnalyzingDeltaBeforeDone).toBe(true);
+    expect(events.some((event) => event.event === 'done')).toBe(false);
+
+    releaseAnalyze?.();
+    await collector;
+    expect(events.some((event) => event.event === 'done')).toBe(true);
   });
 
   it('reuses cached corpusStudyPlan within TTL (LEARN-07b)', async () => {
