@@ -111,6 +111,22 @@ export class ChatController {
     await this.chatService.deleteThread(uid, chatId);
   }
 
+  @Get(':chatId/revision-calendar.ics')
+  async exportRevisionCalendarIcs(
+    @Req() request: FirebaseAuthRequest,
+    @Param('chatId') chatId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    const uid = this.requireUid(request);
+    const exportFile = await this.chatService.exportRevisionCalendarIcs(uid, chatId);
+    response.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${exportFile.filename}"`,
+    );
+    response.send(exportFile.content);
+  }
+
   @Get(':chatId/messages')
   async listMessages(
     @Req() request: FirebaseAuthRequest,

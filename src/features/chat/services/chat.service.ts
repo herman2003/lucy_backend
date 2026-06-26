@@ -2,6 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
+import { getValidCorpusStudyPlan } from '../utils/corpus-study-plan-cache';
+import { buildRevisionCalendarEntries } from '../../learning-sessions/utils/revision-calendar.util';
+import { buildRevisionCalendarIcs } from '../utils/revision-calendar-ics.util';
+import {
+  USERS_PROFILE_REPOSITORY,
+  type UsersProfileRepository,
+} from '../../users/repositories/users.repository.port';
+import type { TutoringLanguage } from '../../onboarding/domain/learner-profile.enums';
 import {
   DEFAULT_CHAT_TITLE,
   type CreateChatRequestDto,
@@ -39,6 +47,11 @@ export type ChatMessageDto = {
   sources?: PersistedChatMessage['sources'];
 };
 
+export type RevisionCalendarIcsExport = {
+  filename: string;
+  content: string;
+};
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -46,6 +59,8 @@ export class ChatService {
     private readonly chatsRepository: ChatsRepository,
     private readonly chatPrerequisites: ChatPrerequisitesService,
     private readonly activeStreams: ChatActiveStreamRegistry,
+    @Inject(USERS_PROFILE_REPOSITORY)
+    private readonly usersRepository: UsersProfileRepository,
   ) {}
 
   getEligibility(uid: string): Promise<ChatEligibilityDto> {
@@ -87,6 +102,82 @@ export class ChatService {
         : {}),
     });
     return messages.map((message) => this.toMessageDto(message));
+  }
+
+  async exportRevisionCalendarIcs(
+    uid: string,
+    chatId: string,
+  ): Promise<RevisionCalendarIcsExport> {
+    const thread = await this.requireThread(uid, chatId);
+    if (!thread.revisionExamDate) {
+      throw new LucyApiError(
+        404,
+        LucyErrorCodes.VALIDATION_ERROR,
+        'Revision calendar unavailable',
+      );
+    }
+
+    const corpusStudyPlan = getValidCorpusStudyPlan(thread.corpusStudyPlan);
+    if (!corpusStudyPlan) {
+      throw new LucyApiError(
+        404,
+        LucyErrorCodes.VALIDATION_ERROR,
+        'Revision calendar unavailable',
+      );
+    }
+
+    const examDate = new Date(thread.revisionExamDate);
+    const now = new Date();
+    const entries = buildRevisionCalendarEntries(
+      corpusStudyPlan.focusAreas,
+      examDate,
+      now,
+    );
+    if (entries.length === 0) {
+      throw new LucyApiError(
+        404,
+        LucyErrorCodes.VALIDATION_ERROR,
+        'Revision calendar unavailable',
+      );
+    }
+
+    const language = await this.resolveTutoringLanguage(uid);
+    const content = buildRevisionCalendarIcs({
+      calendarName: thread.title,
+      entries,
+      language,
+      generatedAt: now,
+      uidPrefix: `chat-${chatId}`,
+    });
+
+    return {
+      filename: 'lucy-revision-calendar.ics',
+      content,
+    };
+  }
+
+  private async resolveTutoringLanguage(
+    uid: string,
+  ): Promise<'fr' | 'en' | 'de'> {
+    const profile = await this.usersRepository.getProfile(uid);
+    const learnerProfile = profile?.learnerProfile;
+    if (
+      learnerProfile &&
+      typeof learnerProfile === 'object' &&
+      typeof (learnerProfile as Record<string, unknown>).tutoring_language ===
+        'string'
+    ) {
+      const language = (learnerProfile as { tutoring_language: TutoringLanguage })
+        .tutoring_language;
+      if (language === 'en' || language === 'de') {
+        return language;
+      }
+    }
+    const uiLocale = profile?.uiLocale;
+    if (uiLocale === 'en' || uiLocale === 'de') {
+      return uiLocale;
+    }
+    return 'fr';
   }
 
   private async requireThread(uid: string, chatId: string): Promise<PersistedChatThread> {
