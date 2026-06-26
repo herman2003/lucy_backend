@@ -45,6 +45,12 @@ describe('chat-learning-generation (LEARN-01d)', () => {
     expect(parseLearningItemCount('fais-moi un quiz')).toBeUndefined();
   });
 
+  it('parses written item counts in letters (LEARN-11b)', () => {
+    expect(parseLearningItemCount('quinze')).toBe(15);
+    expect(parseLearningItemCount('fifteen')).toBe(15);
+    expect(parseLearningItemCount('fais-moi un quiz de quinze questions')).toBe(15);
+  });
+
   it('builds a short assistant reply in tutoring language', () => {
     expect(
       buildLearningSessionCreatedReply('fr', 'quiz', 'Quiz · 2026-05-29'),

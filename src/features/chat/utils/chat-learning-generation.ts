@@ -1,4 +1,5 @@
 import type { LearningSessionType } from '../../learning-sessions/domain/learning-session.types';
+import { parseWrittenLearningItemCount } from '../../learning-sessions/utils/learning-item-count-words.util';
 import type { TutoringLanguage } from '../../onboarding/domain/learner-profile.enums';
 
 const QUIZ_INTENT_PATTERNS = [
@@ -83,11 +84,7 @@ export function detectLearningGenerationIntent(
 }
 
 export function parseLearningItemCount(message: string): number | undefined {
-  const match = message.match(/\b(\d{1,2})\b/);
-  if (!match) {
-    return undefined;
-  }
-  return Number.parseInt(match[1]!, 10);
+  return parseWrittenLearningItemCount(message);
 }
 
 export function buildLearningSessionCreatedReply(

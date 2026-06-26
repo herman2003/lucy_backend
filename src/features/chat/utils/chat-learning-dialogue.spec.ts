@@ -151,6 +151,27 @@ describe('chat-learning-dialogue (LEARN-06)', () => {
     });
   });
 
+  it('accepts written item counts during count step (LEARN-11b)', () => {
+    const outcome = processLearningDialogueTurn({
+      message: 'quinze',
+      pending: {
+        type: 'quiz',
+        step: 'awaiting_count',
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'assistant_reply',
+      pending: {
+        step: 'awaiting_launch_confirm',
+        itemCount: 15,
+      },
+    });
+  });
+
   it('generates only after launch confirmation', () => {
     const outcome = processLearningDialogueTurn({
       message: 'oui',
