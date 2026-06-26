@@ -36,6 +36,7 @@ import {
   filterHitsByFocusAreas,
 } from '../utils/focus-scoped-retrieval';
 import { buildLearningSessionTitle } from '../utils/learning-session-title.util';
+import { learningGenerationFailed } from '../utils/learning-generation-failure.error';
 
 const QUIZ_GENERATION_USER_MARKER = 'GENERATE_QUIZ_ITEMS=true';
 const FLASHCARDS_GENERATION_USER_MARKER = 'GENERATE_FLASHCARD_ITEMS=true';
@@ -95,9 +96,8 @@ export class LearningSessionsService {
       this.logger.warn(
         `learning generation skipped uid=${uid} type=${input.type}: no retrieval hits`,
       );
-      throw new LucyApiError(
-        502,
-        LucyErrorCodes.LEARNING_GENERATION_FAILED,
+      throw learningGenerationFailed(
+        'no_retrieval_hits',
         'No retrieval hits available for learning session generation',
       );
     }
@@ -267,11 +267,7 @@ export class LearningSessionsService {
     this.logger.warn(
       `${failureMessage}: ${formatGenerationErrorCause(lastError)}`,
     );
-    throw new LucyApiError(
-      502,
-      LucyErrorCodes.LEARNING_GENERATION_FAILED,
-      failureMessage,
-    );
+    throw learningGenerationFailed('invalid_llm_output', failureMessage);
   }
 }
 

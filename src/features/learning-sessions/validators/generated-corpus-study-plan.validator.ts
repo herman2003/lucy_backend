@@ -1,5 +1,4 @@
-import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
-import { LucyApiError } from '../../../core/errors/lucy-api.error';
+import { learningGenerationFailed } from '../utils/learning-generation-failure.error';
 import type {
   StudyFocusArea,
   StudyFocusImportance,
@@ -159,10 +158,6 @@ function readOptionalPage(value: unknown, field: string): number | undefined {
   return value;
 }
 
-function analysisFailed(message: string): LucyApiError {
-  return new LucyApiError(
-    502,
-    LucyErrorCodes.LEARNING_GENERATION_FAILED,
-    message,
-  );
+function analysisFailed(message: string) {
+  return learningGenerationFailed('invalid_llm_output', message);
 }

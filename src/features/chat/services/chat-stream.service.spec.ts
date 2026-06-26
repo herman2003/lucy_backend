@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { AppConfigModule, LUCY_CONFIG } from '../../../core/config/app-config.module';
 import { loadLucyConfig } from '../../../core/config/lucy-config';
+import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
+import { LucyApiError } from '../../../core/errors/lucy-api.error';
 import { EMBEDDING_PORT } from '../../../core/llm/embedding.tokens';
 import { FakeEmbeddingAdapter } from '../../../core/llm/fake.embedding.adapter';
 import { LlmModule } from '../../../core/llm/llm.module';
@@ -10,7 +12,6 @@ import { buildOffCorpusAssistantReply } from '../utils/chat-off-corpus-reply';
 import { PromptLoaderService } from '../../../core/prompt/prompt-loader.service';
 import { PromptModule } from '../../../core/prompt/prompt.module';
 import { InMemoryUsersStore } from '../../../core/persistence/in-memory-users.store';
-import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { InMemoryDocumentChunksRepository } from '../../documents/repositories/in-memory-document-chunks.repository';
 import { InMemoryDocumentsRepository } from '../../documents/repositories/in-memory-documents.repository';
 import { DOCUMENT_CHUNKS_REPOSITORY } from '../../documents/repositories/document-chunks.repository.port';
@@ -519,6 +520,39 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
 
     const doneEvent = events.find((event) => event.event === 'done');
     expect(doneEvent?.data.assistantMessage.content).toContain('Ton quiz est prêt');
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.pendingLearningGeneration).toBeUndefined();
+  });
+
+  it('returns an actionable assistant message when generation fails (LEARN-09b)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    jest.spyOn(learningSessionsService, 'generate').mockRejectedValue(
+      new LucyApiError(
+        502,
+        LucyErrorCodes.LEARNING_GENERATION_FAILED,
+        'No retrieval hits available for learning session generation',
+        { adviceKey: 'no_retrieval_hits' },
+      ),
+    );
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '1'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '5'));
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'oui'),
+    );
+
+    expect(events.some((event) => event.event === 'error')).toBe(false);
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain(
+      'pas trouvé assez de contenu',
+    );
 
     const updatedThread = await chatsRepository.getThread(uid, thread.id);
     expect(updatedThread?.pendingLearningGeneration).toBeUndefined();

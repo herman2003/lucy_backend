@@ -19,9 +19,11 @@ import {
 import {
   buildFocusSelectionMessage,
   buildLearningAnalyzingMessage,
+  buildLearningGenerationFailedMessage,
   buildLearningGeneratingMessage,
   buildTopicFallbackPrompt,
 } from '../utils/chat-learning-dialogue-messages';
+import { readLearningGenerationAdviceKey } from '../../learning-sessions/utils/learning-generation-failure.error';
 import { processLearningDialogueTurn } from '../utils/chat-learning-dialogue';
 import { getValidCorpusStudyPlan } from '../utils/corpus-study-plan-cache';
 import { resolveSelectedFocusAreas } from '../../learning-sessions/utils/focus-scoped-retrieval';
@@ -361,13 +363,47 @@ export class ChatStreamService {
       outcome.selectedFocusAreaIds,
     );
 
-    const session = await this.learningSessionsService.generate(uid, {
-      type: outcome.type,
-      itemCount: outcome.itemCount,
-      sourceChatId: chatId,
-      ...(outcome.topicHint !== undefined ? { topicHint: outcome.topicHint } : {}),
-      ...(focusAreas.length > 0 ? { focusAreas } : {}),
-    });
+    let session: PersistedLearningSession;
+    try {
+      session = await this.learningSessionsService.generate(uid, {
+        type: outcome.type,
+        itemCount: outcome.itemCount,
+        sourceChatId: chatId,
+        ...(outcome.topicHint !== undefined ? { topicHint: outcome.topicHint } : {}),
+        ...(focusAreas.length > 0 ? { focusAreas } : {}),
+      });
+    } catch (error) {
+      if (
+        !(error instanceof LucyApiError) ||
+        error.error !== LucyErrorCodes.LEARNING_GENERATION_FAILED
+      ) {
+        throw error;
+      }
+
+      const failureText = buildLearningGenerationFailedMessage(
+        turn.learnerProfile.tutoring_language,
+        outcome.type,
+        readLearningGenerationAdviceKey(error),
+      );
+      options.onTextDelta?.(failureText);
+
+      const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+        id: newMessageId(),
+        role: 'assistant',
+        content: failureText,
+        createdAt: new Date().toISOString(),
+        status: 'completed',
+        sources: [],
+      });
+
+      if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {
+        await this.chatsRepository.patchThread(uid, chatId, {
+          title: buildAutoTitle(content),
+        });
+      }
+
+      return { assistantMessage, sources: [] };
+    }
 
     const assistantText = buildLearningSessionCreatedReply(
       turn.learnerProfile.tutoring_language,

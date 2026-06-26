@@ -11,6 +11,7 @@ import { PromptLoaderService } from '../../../core/prompt/prompt-loader.service'
 import { PromptModule } from '../../../core/prompt/prompt.module';
 import { InMemoryUsersStore } from '../../../core/persistence/in-memory-users.store';
 import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
+import { LucyApiError } from '../../../core/errors/lucy-api.error';
 import { InMemoryDocumentChunksRepository } from '../../documents/repositories/in-memory-document-chunks.repository';
 import { InMemoryDocumentsRepository } from '../../documents/repositories/in-memory-documents.repository';
 import { DOCUMENT_CHUNKS_REPOSITORY } from '../../documents/repositories/document-chunks.repository.port';
@@ -201,6 +202,18 @@ describe('LearningSessionsService (LEARN-01b)', () => {
     });
 
     expect(session.title).toBe('Cartes · entropie');
+  });
+
+  it('returns actionable adviceKey when retrieval has no hits (LEARN-09b)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    jest.spyOn(retrievalService, 'search').mockResolvedValue([]);
+
+    await expect(service.generate(uid, { type: 'quiz' })).rejects.toMatchObject({
+      statusCode: 502,
+      error: LucyErrorCodes.LEARNING_GENERATION_FAILED,
+      details: { adviceKey: 'no_retrieval_hits' },
+    });
   });
 
   it('passes learner profile and difficulty guidance to quiz generation prompt (LEARN-07e)', async () => {

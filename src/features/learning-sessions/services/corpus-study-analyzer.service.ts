@@ -2,8 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { LLM_PORT } from '../../../core/llm/llm.tokens';
 import type { LlmPort } from '../../../core/llm/llm.port';
-import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
+import { learningGenerationFailed } from '../utils/learning-generation-failure.error';
 import { PromptLoaderService } from '../../../core/prompt/prompt-loader.service';
 import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
 import {
@@ -67,9 +67,8 @@ export class CorpusStudyAnalyzerService {
       CORPUS_STUDY_MAX_EXCERPTS,
     );
     if (hits.length === 0) {
-      throw new LucyApiError(
-        502,
-        LucyErrorCodes.LEARNING_GENERATION_FAILED,
+      throw learningGenerationFailed(
+        'no_retrieval_hits',
         'No excerpts available for corpus study analysis',
       );
     }
@@ -200,10 +199,6 @@ function toAnalysisError(error: unknown): LucyApiError {
   );
 }
 
-function analysisFailed(message: string): LucyApiError {
-  return new LucyApiError(
-    502,
-    LucyErrorCodes.LEARNING_GENERATION_FAILED,
-    message,
-  );
+function analysisFailed(message: string) {
+  return learningGenerationFailed('invalid_llm_output', message);
 }

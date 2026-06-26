@@ -1,5 +1,4 @@
-import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
-import { LucyApiError } from '../../../core/errors/lucy-api.error';
+import { learningGenerationFailed } from '../utils/learning-generation-failure.error';
 import type { LearningSessionQuizItem } from '../domain/learning-session.types';
 import type { SearchRetrievalHitDto } from '../../retrieval/dto/search-retrieval.dto';
 import { normalizeGeneratedQuizPayload } from './generated-quiz-normalizer';
@@ -106,6 +105,6 @@ function readNonEmptyString(value: unknown, field: string): string {
   return value.trim();
 }
 
-function generationFailed(message: string): LucyApiError {
-  return new LucyApiError(502, LucyErrorCodes.LEARNING_GENERATION_FAILED, message);
+function generationFailed(message: string) {
+  return learningGenerationFailed('invalid_llm_output', message);
 }

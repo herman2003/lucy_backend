@@ -272,3 +272,43 @@ export function buildTopicFallbackPrompt(
       return `Je n’ai pas pu analyser tes documents automatiquement. Sur quel sujet ou chapitre veux-tu ce **${label}** ?`;
   }
 }
+
+export function buildLearningGenerationFailedMessage(
+  tutoringLanguage: TutoringLanguage,
+  type: LearningSessionType,
+  adviceKey: 'no_retrieval_hits' | 'invalid_llm_output' | 'unknown',
+): string {
+  const lang = resolveLanguage(tutoringLanguage);
+  const label = typeLabel(lang, type);
+
+  if (adviceKey === 'no_retrieval_hits') {
+    switch (lang) {
+      case 'en':
+        return `I could not find enough content in your active documents to build this **${label}**. Try enabling another document, broadening your section selection, or asking for a wider topic.`;
+      case 'de':
+        return `Ich habe nicht genug Inhalt in deinen aktiven Dokumenten gefunden, um diese **${label}** zu erstellen. Aktiviere ein weiteres Dokument, erweitere deine Auswahl oder wähle ein breiteres Thema.`;
+      default:
+        return `Je n’ai pas trouvé assez de contenu dans tes documents actifs pour générer ce **${label}**. Essaie d’activer un autre document, d’élargir ta sélection de parties, ou de demander un sujet plus large.`;
+    }
+  }
+
+  if (adviceKey === 'invalid_llm_output') {
+    switch (lang) {
+      case 'en':
+        return `Generation failed on my side. Try again in a moment, or ask for fewer ${type === 'quiz' ? 'questions' : 'flashcards'}. You can also restart by asking for a new **${label}**.`;
+      case 'de':
+        return `Die Generierung ist auf meiner Seite fehlgeschlagen. Versuche es gleich noch einmal oder fordere weniger ${type === 'quiz' ? 'Fragen' : 'Karteikarten'} an. Du kannst auch einfach eine neue **${label}** anfordern.`;
+      default:
+        return `La génération a échoué de mon côté. Réessaie dans un instant, ou demande moins de ${type === 'quiz' ? 'questions' : 'cartes'}. Tu peux aussi redemander un nouveau **${label}** depuis le chat.`;
+    }
+  }
+
+  switch (lang) {
+    case 'en':
+      return `I could not generate your **${label}**. Try again from chat, or pick different sections before launching.`;
+    case 'de':
+      return `Ich konnte deine **${label}** nicht erstellen. Versuche es erneut im Chat oder wähle andere Abschnitte vor dem Start.`;
+    default:
+      return `Je n’ai pas pu générer ton **${label}**. Réessaie depuis le chat, ou choisis d’autres parties avant de lancer.`;
+  }
+}
