@@ -188,6 +188,19 @@ describe('LearningSessionsService (LEARN-01b)', () => {
     for (const item of session.items) {
       expect(item.sources.every((source) => source.chunkId === 'chunk_0')).toBe(true);
     }
+    expect(session.title).toBe('Quiz · Entropie');
+  });
+
+  it('uses topicHint in the session title when focus areas are absent (LEARN-09a)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+
+    const session = await service.generate(uid, {
+      type: 'flashcards',
+      topicHint: 'entropie',
+    });
+
+    expect(session.title).toBe('Cartes · entropie');
   });
 
   it('passes learner profile and difficulty guidance to quiz generation prompt (LEARN-07e)', async () => {

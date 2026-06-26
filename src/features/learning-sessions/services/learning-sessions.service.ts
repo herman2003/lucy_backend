@@ -35,6 +35,7 @@ import {
   documentIdsFromFocusAreas,
   filterHitsByFocusAreas,
 } from '../utils/focus-scoped-retrieval';
+import { buildLearningSessionTitle } from '../utils/learning-session-title.util';
 
 const QUIZ_GENERATION_USER_MARKER = 'GENERATE_QUIZ_ITEMS=true';
 const FLASHCARDS_GENERATION_USER_MARKER = 'GENERATE_FLASHCARD_ITEMS=true';
@@ -111,7 +112,12 @@ export class LearningSessionsService {
       type: input.type,
       status: 'ready',
       itemCount: items.length,
-      title: buildSessionTitle(input.type, now),
+      title: buildLearningSessionTitle({
+        type: input.type,
+        isoTimestamp: now,
+        ...(input.topicHint !== undefined ? { topicHint: input.topicHint } : {}),
+        ...(input.focusAreas !== undefined ? { focusAreas: input.focusAreas } : {}),
+      }),
       createdAt: now,
       updatedAt: now,
       activeDocumentCount: eligibility.activeDocumentCount,
@@ -273,11 +279,6 @@ function retrievalLimitForType(type: LearningSessionType, itemCount: number): nu
   return type === 'quiz'
     ? quizRetrievalLimit(itemCount)
     : flashcardsRetrievalLimit(itemCount);
-}
-
-function buildSessionTitle(type: LearningSessionType, isoTimestamp: string): string {
-  const date = isoTimestamp.slice(0, 10);
-  return type === 'quiz' ? `Quiz · ${date}` : `Cartes · ${date}`;
 }
 
 function buildQuizUserPrompt(
