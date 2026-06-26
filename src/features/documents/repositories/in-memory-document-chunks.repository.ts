@@ -27,7 +27,7 @@ export class InMemoryDocumentChunksRepository implements DocumentChunksRepositor
     this.chunksByDoc.delete(this.key(uid, documentId));
   }
 
-  listChunks(uid: string, documentId: string): PersistedDocumentChunk[] {
+  async listChunks(uid: string, documentId: string): Promise<PersistedDocumentChunk[]> {
     return [...(this.chunksByDoc.get(this.key(uid, documentId)) ?? [])];
   }
 
@@ -39,7 +39,7 @@ export class InMemoryDocumentChunksRepository implements DocumentChunksRepositor
   ): Promise<ChunkSimilarityHit[]> {
     const hits: ChunkSimilarityHit[] = [];
     for (const documentId of documentIds) {
-      for (const chunk of this.listChunks(uid, documentId)) {
+      for (const chunk of await this.listChunks(uid, documentId)) {
         hits.push({
           documentId,
           chunkId: chunk.id,

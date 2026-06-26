@@ -6,6 +6,14 @@ import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
 import { PromptLoaderService } from '../../../core/prompt/prompt-loader.service';
 import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
+import {
+  DOCUMENTS_REPOSITORY,
+  type DocumentsRepository,
+} from '../../documents/repositories/documents.repository.port';
+import {
+  DOCUMENT_CHUNKS_REPOSITORY,
+  type DocumentChunksRepository,
+} from '../../documents/repositories/document-chunks.repository.port';
 import type { SearchRetrievalHitDto } from '../../retrieval/dto/search-retrieval.dto';
 import { RetrievalService } from '../../retrieval/services/retrieval.service';
 import { ChatPrerequisitesService } from '../../chat/services/chat-prerequisites.service';
@@ -17,6 +25,12 @@ import {
   CORPUS_STUDY_SAMPLE_QUERIES,
 } from '../dto/learning-session.constants';
 import { parseGeneratedCorpusStudyPlan } from '../validators/generated-corpus-study-plan.validator';
+import {
+  buildDocumentOutlinePromptEntries,
+  mergeCorpusStudyExcerpts,
+  sampleExcerptsFromOutlines,
+  type DocumentOutlinePromptEntry,
+} from '../utils/corpus-study-outline.util';
 
 const CORPUS_STUDY_USER_MARKER = 'CORPUS_STUDY_ANALYSIS=true';
 
@@ -28,6 +42,10 @@ export class CorpusStudyAnalyzerService {
     private readonly chatPrerequisites: ChatPrerequisitesService,
     private readonly retrievalService: RetrievalService,
     private readonly prompts: PromptLoaderService,
+    @Inject(DOCUMENTS_REPOSITORY)
+    private readonly documentsRepository: DocumentsRepository,
+    @Inject(DOCUMENT_CHUNKS_REPOSITORY)
+    private readonly chunksRepository: DocumentChunksRepository,
     @Inject(LLM_PORT)
     private readonly llmPort: LlmPort,
   ) {}
@@ -36,7 +54,18 @@ export class CorpusStudyAnalyzerService {
     const learnerProfile = await this.chatPrerequisites.requireLearnerProfile(uid);
     await this.chatPrerequisites.requireActiveDocuments(uid);
 
-    const hits = await this.sampleCorpusExcerpts(uid);
+    const documents = await this.documentsRepository.list(uid);
+    const outlineHits = await sampleExcerptsFromOutlines(
+      uid,
+      documents,
+      this.chunksRepository,
+    );
+    const retrievalHits = await this.sampleCorpusExcerpts(uid);
+    const hits = mergeCorpusStudyExcerpts(
+      outlineHits,
+      retrievalHits,
+      CORPUS_STUDY_MAX_EXCERPTS,
+    );
     if (hits.length === 0) {
       throw new LucyApiError(
         502,
@@ -46,8 +75,9 @@ export class CorpusStudyAnalyzerService {
     }
 
     const validationContext = buildValidationContext(hits);
+    const outlineEntries = buildDocumentOutlinePromptEntries(documents);
     const systemPrompt = this.prompts.getCorpusStudyAnalyzerSystemPrompt(learnerProfile);
-    const userPrompt = buildCorpusStudyUserPrompt(learnerProfile, hits);
+    const userPrompt = buildCorpusStudyUserPrompt(learnerProfile, hits, outlineEntries);
 
     let lastError: LucyApiError | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -123,6 +153,7 @@ function buildValidationContext(hits: SearchRetrievalHitDto[]): {
 function buildCorpusStudyUserPrompt(
   learnerProfile: LearnerProfile,
   hits: SearchRetrievalHitDto[],
+  outlineEntries: DocumentOutlinePromptEntry[],
 ): string {
   const documents = [...buildValidationContext(hits).documentsById.entries()].map(
     ([id, doc]) => ({ id, title: doc.title }),
@@ -144,6 +175,9 @@ function buildCorpusStudyUserPrompt(
     CORPUS_STUDY_USER_MARKER,
     `LEARNER_PROFILE=${JSON.stringify(learnerProfile)}`,
     `DOCUMENTS_JSON=${JSON.stringify(documents)}`,
+    ...(outlineEntries.length > 0
+      ? [`DOCUMENT_OUTLINES_JSON=${JSON.stringify(outlineEntries)}`]
+      : []),
     'EXCERPTS:',
     excerpts,
   ].join('\n');

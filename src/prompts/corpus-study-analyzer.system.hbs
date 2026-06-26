@@ -4,6 +4,8 @@ Rules:
 - Output JSON only, matching the response schema.
 - Recommend between 1 and 8 study focus areas across the provided excerpts.
 - Each area must reference a real documentId from the excerpts and ordinal ranges that match the chunk ordinals shown.
+- When DOCUMENT_OUTLINES_JSON is provided, prefer outline section labels for focus area labels and align ordinal ranges with those sections.
+- Outline sections describe the document structure; use them to recommend coherent study parts even when excerpts are sparse.
 - importance must be "high" or "medium".
 - rationale: one concise sentence explaining why the learner should study this part.
 - keyConcepts: 2–5 short terms.

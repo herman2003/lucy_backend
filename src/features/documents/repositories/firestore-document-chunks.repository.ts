@@ -61,6 +61,24 @@ export class FirestoreDocumentChunksRepository implements DocumentChunksReposito
     await batch.commit();
   }
 
+  async listChunks(uid: string, documentId: string): Promise<PersistedDocumentChunk[]> {
+    const snapshot = await this.chunksCollection(uid, documentId).get();
+    return snapshot.docs
+      .map((doc) => {
+        const data = doc.data() as ChunkFirestoreData;
+        return {
+          id: doc.id,
+          ordinal: data.ordinal,
+          text: data.text,
+          tokenEstimate: data.tokenEstimate,
+          embedding: data.embedding,
+          ...(data.pageStart !== undefined ? { pageStart: data.pageStart } : {}),
+          ...(data.pageEnd !== undefined ? { pageEnd: data.pageEnd } : {}),
+        };
+      })
+      .sort((left, right) => left.ordinal - right.ordinal);
+  }
+
   async searchSimilar(
     uid: string,
     queryEmbedding: number[],
@@ -69,16 +87,15 @@ export class FirestoreDocumentChunksRepository implements DocumentChunksReposito
   ): Promise<ChunkSimilarityHit[]> {
     const hits: ChunkSimilarityHit[] = [];
     for (const documentId of documentIds) {
-      const snapshot = await this.chunksCollection(uid, documentId).get();
-      for (const doc of snapshot.docs) {
-        const data = doc.data() as ChunkFirestoreData;
+      const chunks = await this.listChunks(uid, documentId);
+      for (const chunk of chunks) {
         hits.push({
           documentId,
-          chunkId: doc.id,
-          text: data.text,
-          score: cosineSimilarity(queryEmbedding, data.embedding),
-          ...(data.pageStart !== undefined ? { pageStart: data.pageStart } : {}),
-          ...(data.pageEnd !== undefined ? { pageEnd: data.pageEnd } : {}),
+          chunkId: chunk.id,
+          text: chunk.text,
+          score: cosineSimilarity(queryEmbedding, chunk.embedding),
+          ...(chunk.pageStart !== undefined ? { pageStart: chunk.pageStart } : {}),
+          ...(chunk.pageEnd !== undefined ? { pageEnd: chunk.pageEnd } : {}),
         });
       }
     }

@@ -145,7 +145,7 @@ describe('DocumentIngestionService', () => {
     expect(ready?.status).toBe('ready');
     expect(ready?.chunkCount).toBeGreaterThan(0);
 
-    const chunks = chunksRepository.listChunks(uid, created.id);
+    const chunks = await chunksRepository.listChunks(uid, created.id);
     expect(chunks.length).toBe(ready?.chunkCount);
     expect(chunks[0]?.embedding.length).toBeGreaterThan(0);
   });
