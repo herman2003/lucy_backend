@@ -8,10 +8,15 @@ import { DocumentsModule } from '../documents/documents.module';
 import { ChatModule } from '../chat/chat.module';
 import { RetrievalModule } from '../retrieval/retrieval.module';
 import { LearningSessionsController } from './learning-sessions.controller';
+import { LearningSessionAttemptsController } from './learning-session-attempts.controller';
 import { FirestoreLearningSessionsRepository } from './repositories/firestore-learning-sessions.repository';
+import { FirestoreLearningSessionAttemptsRepository } from './repositories/firestore-learning-session-attempts.repository';
 import { InMemoryLearningSessionsRepository } from './repositories/in-memory-learning-sessions.repository';
+import { InMemoryLearningSessionAttemptsRepository } from './repositories/in-memory-learning-session-attempts.repository';
 import { LEARNING_SESSIONS_REPOSITORY } from './repositories/learning-sessions.repository.port';
+import { LEARNING_SESSION_ATTEMPTS_REPOSITORY } from './repositories/learning-session-attempts.repository.port';
 import { LearningSessionsService } from './services/learning-sessions.service';
+import { LearningSessionAttemptsService } from './services/learning-session-attempts.service';
 import { CorpusStudyAnalyzerService } from './services/corpus-study-analyzer.service';
 
 @Module({
@@ -22,12 +27,15 @@ import { CorpusStudyAnalyzerService } from './services/corpus-study-analyzer.ser
     LlmModule,
     PromptModule,
   ],
-  controllers: [LearningSessionsController],
+  controllers: [LearningSessionsController, LearningSessionAttemptsController],
   providers: [
     LearningSessionsService,
+    LearningSessionAttemptsService,
     CorpusStudyAnalyzerService,
     InMemoryLearningSessionsRepository,
+    InMemoryLearningSessionAttemptsRepository,
     FirestoreLearningSessionsRepository,
+    FirestoreLearningSessionAttemptsRepository,
     {
       provide: LEARNING_SESSIONS_REPOSITORY,
       useFactory: (
@@ -41,7 +49,25 @@ import { CorpusStudyAnalyzerService } from './services/corpus-study-analyzer.ser
         InMemoryLearningSessionsRepository,
       ],
     },
+    {
+      provide: LEARNING_SESSION_ATTEMPTS_REPOSITORY,
+      useFactory: (
+        config: LucyConfig,
+        firestore: FirestoreLearningSessionAttemptsRepository,
+        memory: InMemoryLearningSessionAttemptsRepository,
+      ) => (config.firestoreProvider === 'memory' ? memory : firestore),
+      inject: [
+        LUCY_CONFIG,
+        FirestoreLearningSessionAttemptsRepository,
+        InMemoryLearningSessionAttemptsRepository,
+      ],
+    },
   ],
-  exports: [LearningSessionsService, CorpusStudyAnalyzerService, LEARNING_SESSIONS_REPOSITORY],
+  exports: [
+    LearningSessionsService,
+    LearningSessionAttemptsService,
+    CorpusStudyAnalyzerService,
+    LEARNING_SESSIONS_REPOSITORY,
+  ],
 })
 export class LearningSessionsModule {}
