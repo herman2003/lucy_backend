@@ -1,5 +1,5 @@
-import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import { buildRevisionPlanText } from './chat-learning-dialogue-messages';
+import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 
 const samplePlan: CorpusStudyPlan = {
   generatedAt: '2026-06-10T12:00:00.000Z',
@@ -31,7 +31,7 @@ describe('buildRevisionPlanText (LEARN-10c)', () => {
   });
 
   it('mentions exam type when provided', () => {
-    const text = buildRevisionPlanText('fr', samplePlan, 'partiel');
+    const text = buildRevisionPlanText('fr', samplePlan, { examType: 'partiel' });
     expect(text).toContain('**partiel**');
   });
 
@@ -40,5 +40,17 @@ describe('buildRevisionPlanText (LEARN-10c)', () => {
     expect(text).toContain('## Revision plan');
     expect(text).toContain('high priority');
     expect(text).toContain('flashcards');
+  });
+
+  it('appends a J-N calendar when an exam date is provided (LEARN-11d)', () => {
+    const text = buildRevisionPlanText('fr', samplePlan, {
+      examType: 'partiel',
+      examDate: new Date('2026-06-17T00:00:00.000Z'),
+      now: new Date('2026-06-10T12:00:00.000Z'),
+    });
+
+    expect(text).toContain('## Calendrier J-N');
+    expect(text).toContain('**J-7');
+    expect(text).toContain('**J-0');
   });
 });

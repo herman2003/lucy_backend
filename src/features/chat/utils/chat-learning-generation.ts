@@ -35,6 +35,9 @@ const REVISION_PLAN_INTENT_PATTERNS = [
   /erstell(?:e|en)? (?:einen )?lernplan/i,
   /create (?:a )?revision plan/i,
   /generate (?:a )?revision plan/i,
+  /calendrier(?:\s+de)?\s+r[eé]vision/i,
+  /revision calendar/i,
+  /lernkalender/i,
 ];
 
 const REGENERATION_INTENT_PATTERNS = [

@@ -1,7 +1,17 @@
 import type { LearningSessionType } from '../../learning-sessions/domain/learning-session.types';
 import type { CorpusStudyPlan, StudyFocusArea } from '../../learning-sessions/domain/study-focus-area.types';
+import {
+  buildRevisionCalendarEntries,
+  formatRevisionCalendarSection,
+} from '../../learning-sessions/utils/revision-calendar.util';
 import type { TutoringLanguage } from '../../onboarding/domain/learner-profile.enums';
 import { LEARNING_SESSION_ITEM_LIMITS } from '../../learning-sessions/dto/learning-session.constants';
+
+export type BuildRevisionPlanOptions = {
+  examType?: string;
+  examDate?: Date;
+  now?: Date;
+};
 
 function resolveLanguage(language: TutoringLanguage): 'fr' | 'en' | 'de' {
   if (language === 'en' || language === 'de') {
@@ -300,12 +310,14 @@ export function buildFocusSelectionMessage(
 export function buildRevisionPlanText(
   tutoringLanguage: TutoringLanguage,
   plan: CorpusStudyPlan,
-  examType?: string,
+  options?: string | BuildRevisionPlanOptions,
 ): string {
+  const resolvedOptions = resolveRevisionPlanOptions(options);
   const lang = resolveLanguage(tutoringLanguage);
   const lines = plan.focusAreas.map((area, index) =>
     formatFocusAreaLine(index, area, lang),
   );
+  const examType = resolvedOptions.examType;
   const examSuffix =
     examType !== undefined
       ? lang === 'en'
@@ -315,38 +327,67 @@ export function buildRevisionPlanText(
           : ` pour ton **${examType}**`
       : '';
 
-  switch (lang) {
-    case 'en':
-      return [
-        `## Revision plan${examSuffix}`,
-        '',
-        'Based on your active documents, here is a prioritized study plan you can copy:',
-        '',
-        ...lines,
-        '',
-        '**Next steps:** ask for a **quiz** or **flashcards** on any section (e.g. "quiz on 1 and 2").',
-      ].join('\n');
-    case 'de':
-      return [
-        `## Lernplan${examSuffix}`,
-        '',
-        'Auf Basis deiner aktiven Dokumente — ein priorisierter Plan zum Kopieren:',
-        '',
-        ...lines,
-        '',
-        '**Nächste Schritte:** Bitte um ein **Quiz** oder **Karteikarten** zu einem Abschnitt (z. B. „Quiz zu 1 und 2“).',
-      ].join('\n');
-    default:
-      return [
-        `## Plan de révision${examSuffix}`,
-        '',
-        'D’après tes documents actifs, voici un plan priorisé que tu peux copier :',
-        '',
-        ...lines,
-        '',
-        '**Prochaines étapes :** demande un **quiz** ou des **cartes** sur une section (ex. « quiz sur 1 et 2 »).',
-      ].join('\n');
+  const baseSections = (() => {
+    switch (lang) {
+      case 'en':
+        return [
+          `## Revision plan${examSuffix}`,
+          '',
+          'Based on your active documents, here is a prioritized study plan you can copy:',
+          '',
+          ...lines,
+          '',
+          '**Next steps:** ask for a **quiz** or **flashcards** on any section (e.g. "quiz on 1 and 2").',
+        ];
+      case 'de':
+        return [
+          `## Lernplan${examSuffix}`,
+          '',
+          'Auf Basis deiner aktiven Dokumente — ein priorisierter Plan zum Kopieren:',
+          '',
+          ...lines,
+          '',
+          '**Nächste Schritte:** Bitte um ein **Quiz** oder **Karteikarten** zu einem Abschnitt (z. B. „Quiz zu 1 und 2“).',
+        ];
+      default:
+        return [
+          `## Plan de révision${examSuffix}`,
+          '',
+          'D’après tes documents actifs, voici un plan priorisé que tu peux copier :',
+          '',
+          ...lines,
+          '',
+          '**Prochaines étapes :** demande un **quiz** ou des **cartes** sur une section (ex. « quiz sur 1 et 2 »).',
+        ];
+    }
+  })();
+
+  const calendarSection =
+    resolvedOptions.examDate !== undefined
+      ? formatRevisionCalendarSection(
+          tutoringLanguage,
+          buildRevisionCalendarEntries(
+            plan.focusAreas,
+            resolvedOptions.examDate,
+            resolvedOptions.now ?? new Date(),
+          ),
+        )
+      : '';
+
+  if (!calendarSection) {
+    return baseSections.join('\n');
   }
+
+  return [...baseSections, '', calendarSection].join('\n');
+}
+
+function resolveRevisionPlanOptions(
+  options?: string | BuildRevisionPlanOptions,
+): BuildRevisionPlanOptions {
+  if (typeof options === 'string') {
+    return { examType: options };
+  }
+  return options ?? {};
 }
 
 export function buildRevisionPlanUnavailableMessage(

@@ -29,6 +29,7 @@ import {
 } from '../utils/chat-learning-dialogue-messages';
 import { readLearningGenerationAdviceKey } from '../../learning-sessions/utils/learning-generation-failure.error';
 import { detectLearningExamType } from '../../learning-sessions/utils/learning-exam-type.util';
+import { detectLearningExamDate } from '../../learning-sessions/utils/learning-exam-date.util';
 import { processLearningDialogueTurn } from '../utils/chat-learning-dialogue';
 import { getValidCorpusStudyPlan } from '../utils/corpus-study-plan-cache';
 import { resolveSelectedFocusAreas } from '../../learning-sessions/utils/focus-scoped-retrieval';
@@ -327,6 +328,7 @@ export class ChatStreamService {
 
     const tutoringLanguage = turn.learnerProfile.tutoring_language;
     const examType = detectLearningExamType(content);
+    const examDate = detectLearningExamDate(content);
     const analyzingText = buildLearningAnalyzingMessage(tutoringLanguage);
     options.onTextDelta?.(analyzingText);
 
@@ -364,7 +366,10 @@ export class ChatStreamService {
       }
     }
 
-    const planText = buildRevisionPlanText(tutoringLanguage, corpusStudyPlan, examType);
+    const planText = buildRevisionPlanText(tutoringLanguage, corpusStudyPlan, {
+      examType,
+      examDate,
+    });
     assistantText = `${analyzingText}\n\n${planText}`;
     options.onTextDelta?.(`\n\n${planText}`);
 
