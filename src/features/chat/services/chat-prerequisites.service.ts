@@ -55,6 +55,13 @@ export class ChatPrerequisitesService {
     }
   }
 
+  async listActiveDocuments(uid: string): Promise<Array<{ id: string; title: string }>> {
+    const documents = await this.documentsRepository.list(uid);
+    return documents
+      .filter((doc) => doc.status === 'ready' && doc.searchEnabled === true)
+      .map((doc) => ({ id: doc.id, title: doc.title }));
+  }
+
   private async countActiveSearchReadyDocuments(uid: string): Promise<number> {
     const documents = await this.documentsRepository.list(uid);
     return documents.filter(

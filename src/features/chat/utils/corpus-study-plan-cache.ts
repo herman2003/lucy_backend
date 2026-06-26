@@ -3,6 +3,7 @@ import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus
 export function getValidCorpusStudyPlan(
   plan: CorpusStudyPlan | null | undefined,
   nowMs: number = Date.now(),
+  scopeDocumentId?: string,
 ): CorpusStudyPlan | null {
   if (!plan) {
     return null;
@@ -12,6 +13,11 @@ export function getValidCorpusStudyPlan(
     return null;
   }
   if (plan.focusAreas.length === 0) {
+    return null;
+  }
+  const expectedScope = scopeDocumentId ?? null;
+  const cachedScope = plan.scopeDocumentId ?? null;
+  if (expectedScope !== cachedScope) {
     return null;
   }
   return plan;

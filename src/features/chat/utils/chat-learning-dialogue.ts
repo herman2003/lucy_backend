@@ -1,6 +1,11 @@
 import type { LearningSessionType } from '../../learning-sessions/domain/learning-session.types';
 import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import { resolveLearningExamType } from '../../learning-sessions/utils/learning-exam-type.util';
+import {
+  parseDocumentSelection,
+  resolveLearningDocumentScope,
+  type ActiveDocumentRef,
+} from '../../learning-sessions/utils/learning-document-scope.util';
 import { LEARNING_SESSION_ITEM_LIMITS } from '../../learning-sessions/dto/learning-session.constants';
 import type { TutoringLanguage } from '../../onboarding/domain/learner-profile.enums';
 import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
@@ -17,6 +22,8 @@ import {
   buildLearningLaunchClarifyMessage,
   buildLearningLaunchRecap,
   buildLearningRegenerationUnavailableMessage,
+  buildDocumentSelectionInvalidMessage,
+  buildDocumentSelectionMessage,
   buildTopicFallbackPrompt,
 } from './chat-learning-dialogue-messages';
 import {
@@ -52,6 +59,7 @@ export type ProcessLearningDialogueInput = {
   tutoringLanguage: TutoringLanguage;
   corpusStudyPlan?: CorpusStudyPlan | null;
   lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
+  activeDocuments?: ActiveDocumentRef[];
   nowIso?: string;
 };
 
@@ -145,6 +153,7 @@ export function processLearningDialogueTurn(
       message,
       input.tutoringLanguage,
       input.corpusStudyPlan,
+      input.activeDocuments,
       nowIso,
     );
   }
@@ -162,17 +171,40 @@ export function processLearningDialogueTurn(
   }
 
   const itemCount = resolveItemCount(intent, message);
-
-  if (itemCount !== undefined) {
-    const pending = applyExamTypeToPending(
+  const scopedPending = applyDocumentScopeToPending(
+    applyExamTypeToPending(
       {
         type: intent,
-        step: 'awaiting_launch_confirm',
-        itemCount,
+        step: 'awaiting_confirm',
         updatedAt: nowIso,
       },
       message,
-    );
+    ),
+    message,
+    input.activeDocuments,
+  );
+
+  if (itemCount !== undefined) {
+    const pending = {
+      ...scopedPending,
+      step: 'awaiting_launch_confirm' as const,
+      itemCount,
+    };
+    if (needsDocumentSelection(input.activeDocuments, pending)) {
+      return {
+        kind: 'assistant_reply',
+        text: buildDocumentSelectionMessage(
+          input.tutoringLanguage,
+          input.activeDocuments!,
+          intent,
+        ),
+        pending: {
+          ...pending,
+          step: 'awaiting_document_selection',
+          updatedAt: nowIso,
+        },
+      };
+    }
     return {
       kind: 'assistant_reply',
       text: buildLearningLaunchRecap(
@@ -180,23 +212,16 @@ export function processLearningDialogueTurn(
         intent,
         itemCount,
         pending.examType,
+        pending.documentTitle,
       ),
       pending,
     };
   }
 
-  const pending = applyExamTypeToPending(
-    {
-      type: intent,
-      step: 'awaiting_confirm',
-      updatedAt: nowIso,
-    },
-    message,
-  );
   return {
     kind: 'assistant_reply',
     text: buildLearningConfirmPrompt(input.tutoringLanguage, intent),
-    pending,
+    pending: scopedPending,
   };
 }
 
@@ -233,9 +258,14 @@ function advancePendingDialogue(
   message: string,
   tutoringLanguage: TutoringLanguage,
   corpusStudyPlan: CorpusStudyPlan | null | undefined,
+  activeDocuments: ActiveDocumentRef[] | undefined,
   nowIso: string,
 ): LearningDialogueOutcome {
-  const pendingWithExamType = applyExamTypeToPending(pending, message);
+  const pendingWithExamType = applyDocumentScopeToPending(
+    applyExamTypeToPending(pending, message),
+    message,
+    activeDocuments,
+  );
 
   if (isLearningDialogueCancel(message)) {
     return {
@@ -266,6 +296,21 @@ function advancePendingDialogue(
           itemCount,
           updatedAt: nowIso,
         };
+        if (needsDocumentSelection(activeDocuments, nextPending)) {
+          return {
+            kind: 'assistant_reply',
+            text: buildDocumentSelectionMessage(
+              tutoringLanguage,
+              activeDocuments!,
+              type,
+            ),
+            pending: {
+              ...nextPending,
+              step: 'awaiting_document_selection',
+              updatedAt: nowIso,
+            },
+          };
+        }
         return {
           kind: 'assistant_reply',
           text: buildLearningLaunchRecap(
@@ -273,8 +318,25 @@ function advancePendingDialogue(
             type,
             itemCount,
             nextPending.examType,
+            nextPending.documentTitle,
           ),
           pending: nextPending,
+        };
+      }
+      if (needsDocumentSelection(activeDocuments, pendingWithExamType)) {
+        return {
+          kind: 'assistant_reply',
+          text: buildDocumentSelectionMessage(
+            tutoringLanguage,
+            activeDocuments!,
+            type,
+          ),
+          pending: {
+            ...pendingWithExamType,
+            type,
+            step: 'awaiting_document_selection',
+            updatedAt: nowIso,
+          },
         };
       }
       return {
@@ -284,6 +346,50 @@ function advancePendingDialogue(
           type,
           step: 'analyzing',
           updatedAt: nowIso,
+        },
+      };
+    }
+    case 'awaiting_document_selection': {
+      const parsed = parseDocumentSelection(message, activeDocuments ?? []);
+      if (parsed.kind === 'invalid') {
+        const listText =
+          activeDocuments !== undefined && activeDocuments.length > 0
+            ? `\n\n${buildDocumentSelectionMessage(tutoringLanguage, activeDocuments, type)}`
+            : '';
+        return {
+          kind: 'assistant_reply',
+          text: `${buildDocumentSelectionInvalidMessage(tutoringLanguage)}${listText}`,
+          pending: { ...pendingWithExamType, type, updatedAt: nowIso },
+        };
+      }
+      const withDocument = {
+        ...pendingWithExamType,
+        type,
+        documentId: parsed.documentId,
+        documentTitle: parsed.documentTitle,
+        updatedAt: nowIso,
+      };
+      if (withDocument.itemCount !== undefined) {
+        return {
+          kind: 'assistant_reply',
+          text: buildLearningLaunchRecap(
+            tutoringLanguage,
+            type,
+            withDocument.itemCount,
+            withDocument.examType,
+            withDocument.documentTitle,
+          ),
+          pending: {
+            ...withDocument,
+            step: 'awaiting_launch_confirm',
+          },
+        };
+      }
+      return {
+        kind: 'needs_analysis',
+        pending: {
+          ...withDocument,
+          step: 'analyzing',
         },
       };
     }
@@ -367,6 +473,7 @@ function advancePendingDialogue(
           type,
           itemCount,
           nextPending.examType,
+          nextPending.documentTitle,
         ),
         pending: nextPending,
       };
@@ -416,4 +523,35 @@ function applyExamTypeToPending(
     return pending;
   }
   return { ...pending, examType };
+}
+
+function needsDocumentSelection(
+  activeDocuments: ActiveDocumentRef[] | undefined,
+  pending: PendingLearningGeneration,
+): boolean {
+  if (!activeDocuments || activeDocuments.length <= 1) {
+    return false;
+  }
+  return pending.documentId === undefined;
+}
+
+function applyDocumentScopeToPending(
+  pending: PendingLearningGeneration,
+  message: string,
+  activeDocuments?: ActiveDocumentRef[],
+): PendingLearningGeneration {
+  if (pending.documentId !== undefined || !activeDocuments || activeDocuments.length <= 1) {
+    return pending;
+  }
+
+  const scope = resolveLearningDocumentScope(message, activeDocuments);
+  if (scope.kind !== 'resolved') {
+    return pending;
+  }
+
+  return {
+    ...pending,
+    documentId: scope.documentId,
+    documentTitle: scope.documentTitle,
+  };
 }

@@ -18,4 +18,5 @@ export type CorpusStudyPlan = {
   generatedAt: string;
   expiresAt: string;
   focusAreas: StudyFocusArea[];
+  scopeDocumentId?: string;
 };

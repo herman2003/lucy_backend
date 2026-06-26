@@ -398,12 +398,14 @@ export class ChatStreamService {
     turn: TurnContext,
     options: CompleteTurnOptions,
   ): Promise<CompleteTurnResult | null> {
+    const activeDocuments = await this.chatPrerequisites.listActiveDocuments(uid);
     const outcome = processLearningDialogueTurn({
       message: content,
       pending: turn.thread.pendingLearningGeneration,
       tutoringLanguage: turn.learnerProfile.tutoring_language,
       corpusStudyPlan: turn.thread.corpusStudyPlan,
       lastLearningGenerationRequest: turn.thread.lastLearningGenerationRequest,
+      activeDocuments,
     });
     if (!outcome) {
       return null;
@@ -566,13 +568,20 @@ export class ChatStreamService {
       pendingLearningGeneration: pending,
     });
 
-    let corpusStudyPlan = getValidCorpusStudyPlan(turn.thread.corpusStudyPlan);
+    let corpusStudyPlan = getValidCorpusStudyPlan(
+      turn.thread.corpusStudyPlan,
+      Date.now(),
+      pending.documentId,
+    );
     let assistantText = analyzingText;
 
     if (!corpusStudyPlan) {
       try {
         corpusStudyPlan = await this.corpusStudyAnalyzer.analyze(uid, {
           examType: pending.examType,
+          ...(pending.documentId !== undefined
+            ? { documentIds: [pending.documentId] }
+            : {}),
         });
         await this.chatsRepository.patchThread(uid, chatId, {
           corpusStudyPlan,

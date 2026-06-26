@@ -52,18 +52,26 @@ export class CorpusStudyAnalyzerService {
 
   async analyze(
     uid: string,
-    options?: { examType?: string },
+    options?: { examType?: string; documentIds?: string[] },
   ): Promise<CorpusStudyPlan> {
     const learnerProfile = await this.chatPrerequisites.requireLearnerProfile(uid);
     await this.chatPrerequisites.requireActiveDocuments(uid);
 
-    const documents = await this.documentsRepository.list(uid);
+    const allDocuments = await this.documentsRepository.list(uid);
+    const documents = filterDocumentsForScope(allDocuments, options?.documentIds);
+    if (documents.length === 0) {
+      throw learningGenerationFailed(
+        'no_retrieval_hits',
+        'No active documents available for corpus study analysis',
+      );
+    }
+
     const outlineHits = await sampleExcerptsFromOutlines(
       uid,
       documents,
       this.chunksRepository,
     );
-    const retrievalHits = await this.sampleCorpusExcerpts(uid);
+    const retrievalHits = await this.sampleCorpusExcerpts(uid, options?.documentIds);
     const hits = mergeCorpusStudyExcerpts(
       outlineHits,
       retrievalHits,
@@ -101,6 +109,9 @@ export class CorpusStudyAnalyzerService {
           generatedAt,
           expiresAt: new Date(Date.now() + CORPUS_STUDY_PLAN_TTL_MS).toISOString(),
           focusAreas,
+          ...(options?.documentIds?.length === 1
+            ? { scopeDocumentId: options.documentIds[0] }
+            : {}),
         };
       } catch (error) {
         lastError = toAnalysisError(error);
@@ -113,13 +124,17 @@ export class CorpusStudyAnalyzerService {
     throw lastError ?? analysisFailed('Corpus study analysis failed');
   }
 
-  private async sampleCorpusExcerpts(uid: string): Promise<SearchRetrievalHitDto[]> {
+  private async sampleCorpusExcerpts(
+    uid: string,
+    documentIds?: string[],
+  ): Promise<SearchRetrievalHitDto[]> {
     const byChunkId = new Map<string, SearchRetrievalHitDto>();
 
     for (const query of CORPUS_STUDY_SAMPLE_QUERIES) {
       const hits = await this.retrievalService.search(uid, {
         query,
         limit: 12,
+        ...(documentIds !== undefined ? { documentIds } : {}),
       });
       for (const hit of hits) {
         if (!byChunkId.has(hit.chunkId)) {
@@ -207,4 +222,18 @@ function toAnalysisError(error: unknown): LucyApiError {
 
 function analysisFailed(message: string) {
   return learningGenerationFailed('invalid_llm_output', message);
+}
+
+function filterDocumentsForScope(
+  documents: Awaited<ReturnType<DocumentsRepository['list']>>,
+  documentIds?: string[],
+) {
+  const active = documents.filter(
+    (doc) => doc.status === 'ready' && doc.searchEnabled === true,
+  );
+  if (documentIds === undefined || documentIds.length === 0) {
+    return active;
+  }
+  const allowed = new Set(documentIds);
+  return active.filter((doc) => allowed.has(doc.id));
 }

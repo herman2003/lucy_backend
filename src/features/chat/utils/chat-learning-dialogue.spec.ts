@@ -89,6 +89,86 @@ describe('chat-learning-dialogue (LEARN-06)', () => {
     });
   });
 
+  it('asks for a document when several are active (LEARN-11f)', () => {
+    const activeDocuments = [
+      { id: 'doc_1', title: 'Thermodynamique' },
+      { id: 'doc_2', title: 'Chimie organique' },
+    ];
+
+    const outcome = processLearningDialogueTurn({
+      message: 'oui',
+      pending: {
+        type: 'quiz',
+        step: 'awaiting_confirm',
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      activeDocuments,
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'assistant_reply',
+      pending: { step: 'awaiting_document_selection' },
+    });
+    expect(outcome && outcome.kind === 'assistant_reply' ? outcome.text : '').toContain(
+      'Thermodynamique',
+    );
+  });
+
+  it('scopes to a named document from the first message (LEARN-11f)', () => {
+    const activeDocuments = [
+      { id: 'doc_1', title: 'Thermodynamique' },
+      { id: 'doc_2', title: 'Chimie organique' },
+    ];
+
+    const outcome = processLearningDialogueTurn({
+      message: 'fais-moi un quiz sur Thermodynamique',
+      pending: null,
+      tutoringLanguage: 'fr',
+      activeDocuments,
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'assistant_reply',
+      pending: {
+        type: 'quiz',
+        step: 'awaiting_confirm',
+        documentId: 'doc_1',
+        documentTitle: 'Thermodynamique',
+      },
+    });
+  });
+
+  it('starts analysis after document selection (LEARN-11f)', () => {
+    const activeDocuments = [
+      { id: 'doc_1', title: 'Thermodynamique' },
+      { id: 'doc_2', title: 'Chimie organique' },
+    ];
+
+    const outcome = processLearningDialogueTurn({
+      message: '2',
+      pending: {
+        type: 'quiz',
+        step: 'awaiting_document_selection',
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      activeDocuments,
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'needs_analysis',
+      pending: {
+        step: 'analyzing',
+        documentId: 'doc_2',
+        documentTitle: 'Chimie organique',
+      },
+    });
+  });
+
   it('moves to count after focus selection', () => {
     const plan = {
       generatedAt: now,

@@ -1,4 +1,5 @@
 import type { LearningSessionType } from '../../learning-sessions/domain/learning-session.types';
+import type { ActiveDocumentRef } from '../../learning-sessions/utils/learning-document-scope.util';
 import type { CorpusStudyPlan, StudyFocusArea } from '../../learning-sessions/domain/study-focus-area.types';
 import {
   buildRevisionCalendarEntries,
@@ -86,17 +87,95 @@ export function buildLearningLaunchRecap(
   type: LearningSessionType,
   itemCount: number,
   examType?: string,
+  documentTitle?: string,
 ): string {
   const lang = resolveLanguage(tutoringLanguage);
   const label = typeLabel(lang, type);
   const examClause = formatExamTypeRecapClause(lang, examType);
+  const scopeClause = formatDocumentScopeRecapClause(lang, documentTitle);
   switch (lang) {
     case 'en':
-      return `**Summary**: ${itemCount} ${label} from all your active documents${examClause}. Should I generate them? Reply **yes** or **cancel**.`;
+      return `**Summary**: ${itemCount} ${label}${scopeClause}${examClause}. Should I generate them? Reply **yes** or **cancel**.`;
     case 'de':
-      return `**Zusammenfassung**: ${itemCount} ${label} aus allen aktiven Dokumenten${examClause}. Soll ich starten? Antworte mit **ja** oder **abbrechen**.`;
+      return `**Zusammenfassung**: ${itemCount} ${label}${scopeClause}${examClause}. Soll ich starten? Antworte mit **ja** oder **abbrechen**.`;
     default:
-      return `**Récap** : ${itemCount} ${type === 'quiz' ? 'questions' : 'cartes'} sur tous tes documents actifs${examClause}. Je lance ? Réponds **oui** ou **annule**.`;
+      return `**Récap** : ${itemCount} ${type === 'quiz' ? 'questions' : 'cartes'}${scopeClause}${examClause}. Je lance ? Réponds **oui** ou **annule**.`;
+  }
+}
+
+function formatDocumentScopeRecapClause(
+  language: 'fr' | 'en' | 'de',
+  documentTitle?: string,
+): string {
+  if (!documentTitle) {
+    switch (language) {
+      case 'en':
+        return ' from all your active documents';
+      case 'de':
+        return ' aus allen aktiven Dokumenten';
+      default:
+        return ' sur tous tes documents actifs';
+    }
+  }
+  switch (language) {
+    case 'en':
+      return ` on **${documentTitle}**`;
+    case 'de':
+      return ` zu **${documentTitle}**`;
+    default:
+      return ` sur **${documentTitle}**`;
+  }
+}
+
+export function buildDocumentSelectionMessage(
+  tutoringLanguage: TutoringLanguage,
+  documents: ActiveDocumentRef[],
+  type: LearningSessionType,
+): string {
+  const lang = resolveLanguage(tutoringLanguage);
+  const label = typeLabel(lang, type);
+  const lines = documents.map(
+    (doc, index) => `**${index + 1}.** ${doc.title}`,
+  );
+  switch (lang) {
+    case 'en':
+      return [
+        `You have several active documents. Which one should I use for this **${label}**?`,
+        '',
+        ...lines,
+        '',
+        'Reply with a **number** or the **document title**.',
+      ].join('\n');
+    case 'de':
+      return [
+        `Du hast mehrere aktive Dokumente. Welches soll ich für ${label === 'quiz' ? 'dieses Quiz' : 'diese Karteikarten'} verwenden?`,
+        '',
+        ...lines,
+        '',
+        'Antworte mit einer **Zahl** oder dem **Dokumenttitel**.',
+      ].join('\n');
+    default:
+      return [
+        `Tu as plusieurs documents actifs. Lequel dois-je utiliser pour ${type === 'quiz' ? 'ce quiz' : 'ces cartes'} ?`,
+        '',
+        ...lines,
+        '',
+        'Réponds par un **numéro** ou le **titre du document**.',
+      ].join('\n');
+  }
+}
+
+export function buildDocumentSelectionInvalidMessage(
+  tutoringLanguage: TutoringLanguage,
+): string {
+  const lang = resolveLanguage(tutoringLanguage);
+  switch (lang) {
+    case 'en':
+      return 'I did not recognize that document. Pick one from the list below.';
+    case 'de':
+      return 'Dieses Dokument habe ich nicht erkannt. Wähle eines aus der Liste unten.';
+    default:
+      return 'Je n’ai pas reconnu ce document. Choisis-en un dans la liste ci-dessous.';
   }
 }
 

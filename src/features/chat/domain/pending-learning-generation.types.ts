@@ -2,6 +2,7 @@ import type { LearningSessionType } from '../../learning-sessions/domain/learnin
 
 export type PendingLearningGenerationStep =
   | 'awaiting_confirm'
+  | 'awaiting_document_selection'
   | 'analyzing'
   | 'awaiting_focus_selection'
   | 'awaiting_topic_fallback'
@@ -14,6 +15,8 @@ export type PendingLearningGeneration = {
   itemCount?: number;
   topicHint?: string;
   examType?: string;
+  documentId?: string;
+  documentTitle?: string;
   selectedFocusAreaIds?: string[];
   updatedAt: string;
 };
