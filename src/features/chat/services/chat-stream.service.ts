@@ -377,6 +377,7 @@ export class ChatStreamService {
         itemCount: outcome.itemCount,
         sourceChatId: chatId,
         ...(outcome.topicHint !== undefined ? { topicHint: outcome.topicHint } : {}),
+        ...(outcome.examType !== undefined ? { examType: outcome.examType } : {}),
         ...(focusAreas.length > 0 ? { focusAreas } : {}),
       });
     } catch (error) {
@@ -434,6 +435,7 @@ export class ChatStreamService {
         itemCount: outcome.itemCount,
         requestedAt: new Date().toISOString(),
         ...(outcome.topicHint !== undefined ? { topicHint: outcome.topicHint } : {}),
+        ...(outcome.examType !== undefined ? { examType: outcome.examType } : {}),
         ...(outcome.selectedFocusAreaIds !== undefined
           ? { selectedFocusAreaIds: outcome.selectedFocusAreaIds }
           : {}),
@@ -474,7 +476,9 @@ export class ChatStreamService {
 
     if (!corpusStudyPlan) {
       try {
-        corpusStudyPlan = await this.corpusStudyAnalyzer.analyze(uid);
+        corpusStudyPlan = await this.corpusStudyAnalyzer.analyze(uid, {
+          examType: pending.examType,
+        });
         await this.chatsRepository.patchThread(uid, chatId, {
           corpusStudyPlan,
         });

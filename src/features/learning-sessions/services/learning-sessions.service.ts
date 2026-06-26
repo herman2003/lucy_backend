@@ -104,8 +104,18 @@ export class LearningSessionsService {
 
     const items =
       input.type === 'quiz'
-        ? await this.generateQuizItems(learnerProfile, hits, input.itemCount)
-        : await this.generateFlashcardItems(learnerProfile, hits, input.itemCount);
+        ? await this.generateQuizItems(
+            learnerProfile,
+            hits,
+            input.itemCount,
+            input.examType,
+          )
+        : await this.generateFlashcardItems(
+            learnerProfile,
+            hits,
+            input.itemCount,
+            input.examType,
+          );
     const now = new Date().toISOString();
 
     return this.sessionsRepository.create(uid, {
@@ -186,10 +196,12 @@ export class LearningSessionsService {
     learnerProfile: LearnerProfile,
     hits: SearchRetrievalHitDto[],
     itemCount: number,
+    examType?: string,
   ): Promise<LearningSessionQuizItem[]> {
     const systemPrompt = this.prompts.getQuizGeneratorSystemPrompt(
       learnerProfile,
       itemCount,
+      examType,
     );
     const userPrompt = buildQuizUserPrompt(hits, itemCount);
     return this.generateItemsWithRetry(
@@ -205,10 +217,12 @@ export class LearningSessionsService {
     learnerProfile: LearnerProfile,
     hits: SearchRetrievalHitDto[],
     itemCount: number,
+    examType?: string,
   ): Promise<LearningSessionFlashcardItem[]> {
     const systemPrompt = this.prompts.getFlashcardsGeneratorSystemPrompt(
       learnerProfile,
       itemCount,
+      examType,
     );
     const userPrompt = buildFlashcardsUserPrompt(hits, itemCount);
     return this.generateItemsWithRetry(

@@ -40,6 +40,20 @@ describe('parseGenerateLearningSessionRequest (LEARN-01a)', () => {
     });
   });
 
+  it('accepts optional examType (LEARN-10b)', () => {
+    expect(
+      parseGenerateLearningSessionRequest({
+        type: 'flashcards',
+        itemCount: 8,
+        examType: 'partiel',
+      }),
+    ).toEqual({
+      type: 'flashcards',
+      itemCount: 8,
+      examType: 'partiel',
+    });
+  });
+
   it('accepts optional topicHint and focusAreas (LEARN-07d)', () => {
     expect(
       parseGenerateLearningSessionRequest({

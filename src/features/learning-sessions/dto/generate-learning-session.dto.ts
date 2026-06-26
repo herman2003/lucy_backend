@@ -9,6 +9,7 @@ export type GenerateLearningSessionInput = {
   itemCount: number;
   sourceChatId?: string;
   topicHint?: string;
+  examType?: string;
   focusAreas?: StudyFocusArea[];
 };
 
@@ -59,11 +60,20 @@ export function parseGenerateLearningSessionRequest(
 
   const focusAreas = parseOptionalFocusAreas(record.focusAreas);
 
+  let examType: string | undefined;
+  if ('examType' in record) {
+    if (typeof record.examType !== 'string' || record.examType.trim().length === 0) {
+      throw validationError('examType must be a non-empty string');
+    }
+    examType = record.examType.trim();
+  }
+
   return {
     type,
     itemCount,
     ...(sourceChatId !== undefined ? { sourceChatId } : {}),
     ...(topicHint !== undefined ? { topicHint } : {}),
+    ...(examType !== undefined ? { examType } : {}),
     ...(focusAreas !== undefined ? { focusAreas } : {}),
   };
 }

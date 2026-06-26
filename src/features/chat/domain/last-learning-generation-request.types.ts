@@ -4,6 +4,7 @@ export type LastLearningGenerationRequest = {
   type: LearningSessionType;
   itemCount: number;
   topicHint?: string;
+  examType?: string;
   selectedFocusAreaIds?: string[];
   requestedAt: string;
 };

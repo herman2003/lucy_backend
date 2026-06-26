@@ -13,6 +13,7 @@ export type PendingLearningGeneration = {
   step: PendingLearningGenerationStep;
   itemCount?: number;
   topicHint?: string;
+  examType?: string;
   selectedFocusAreaIds?: string[];
   updatedAt: string;
 };

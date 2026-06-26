@@ -136,4 +136,20 @@ describe('PromptLoaderService', () => {
     expect(system.toLowerCase()).toMatch(/link|relate|relationship/);
     expect(system.toLowerCase()).toMatch(/disconnected|isolated|standalone/);
   });
+
+  it('includes optional exam type context in learning prompts (LEARN-10b)', () => {
+    const quiz = service.getQuizGeneratorSystemPrompt(
+      CHAT_TUTOR_PROFILE_FIXTURE,
+      5,
+      'partiel',
+    );
+    const corpus = service.getCorpusStudyAnalyzerSystemPrompt(
+      CHAT_TUTOR_PROFILE_FIXTURE,
+      'dissertation',
+    );
+
+    expect(quiz).toContain('partiel');
+    expect(corpus).toContain('dissertation');
+    expect(quiz).not.toContain('{{');
+  });
 });

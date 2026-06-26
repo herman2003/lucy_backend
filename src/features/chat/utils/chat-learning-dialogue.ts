@@ -1,5 +1,6 @@
 import type { LearningSessionType } from '../../learning-sessions/domain/learning-session.types';
 import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
+import { resolveLearningExamType } from '../../learning-sessions/utils/learning-exam-type.util';
 import { LEARNING_SESSION_ITEM_LIMITS } from '../../learning-sessions/dto/learning-session.constants';
 import type { TutoringLanguage } from '../../onboarding/domain/learner-profile.enums';
 import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
@@ -40,6 +41,7 @@ export type LearningDialogueOutcome =
       type: LearningSessionType;
       itemCount: number;
       topicHint?: string;
+      examType?: string;
       selectedFocusAreaIds?: string[];
       isRegeneration?: boolean;
     };
@@ -162,24 +164,35 @@ export function processLearningDialogueTurn(
   const itemCount = resolveItemCount(intent, message);
 
   if (itemCount !== undefined) {
-    const pending: PendingLearningGeneration = {
-      type: intent,
-      step: 'awaiting_launch_confirm',
-      itemCount,
-      updatedAt: nowIso,
-    };
+    const pending = applyExamTypeToPending(
+      {
+        type: intent,
+        step: 'awaiting_launch_confirm',
+        itemCount,
+        updatedAt: nowIso,
+      },
+      message,
+    );
     return {
       kind: 'assistant_reply',
-      text: buildLearningLaunchRecap(input.tutoringLanguage, intent, itemCount),
+      text: buildLearningLaunchRecap(
+        input.tutoringLanguage,
+        intent,
+        itemCount,
+        pending.examType,
+      ),
       pending,
     };
   }
 
-  const pending: PendingLearningGeneration = {
-    type: intent,
-    step: 'awaiting_confirm',
-    updatedAt: nowIso,
-  };
+  const pending = applyExamTypeToPending(
+    {
+      type: intent,
+      step: 'awaiting_confirm',
+      updatedAt: nowIso,
+    },
+    message,
+  );
   return {
     kind: 'assistant_reply',
     text: buildLearningConfirmPrompt(input.tutoringLanguage, intent),
@@ -208,6 +221,7 @@ function resolveRegenerationDialogue(
     ...(lastRequest.topicHint !== undefined
       ? { topicHint: lastRequest.topicHint }
       : {}),
+    ...(lastRequest.examType !== undefined ? { examType: lastRequest.examType } : {}),
     ...(lastRequest.selectedFocusAreaIds !== undefined
       ? { selectedFocusAreaIds: lastRequest.selectedFocusAreaIds }
       : {}),
@@ -221,6 +235,8 @@ function advancePendingDialogue(
   corpusStudyPlan: CorpusStudyPlan | null | undefined,
   nowIso: string,
 ): LearningDialogueOutcome {
+  const pendingWithExamType = applyExamTypeToPending(pending, message);
+
   if (isLearningDialogueCancel(message)) {
     return {
       kind: 'assistant_reply',
@@ -230,33 +246,41 @@ function advancePendingDialogue(
   }
 
   const typeFromMessage = detectLearningGenerationIntent(message);
-  const type = typeFromMessage ?? pending.type;
+  const type = typeFromMessage ?? pendingWithExamType.type;
 
-  switch (pending.step) {
+  switch (pendingWithExamType.step) {
     case 'awaiting_confirm': {
       if (!isLearningDialogueAffirmative(message)) {
         return {
           kind: 'assistant_reply',
           text: buildLearningConfirmPrompt(tutoringLanguage, type),
-          pending: { ...pending, type, updatedAt: nowIso },
+          pending: { ...pendingWithExamType, type, updatedAt: nowIso },
         };
       }
       const itemCount = resolveItemCount(type, message);
       if (itemCount !== undefined) {
+        const nextPending = {
+          ...pendingWithExamType,
+          type,
+          step: 'awaiting_launch_confirm' as const,
+          itemCount,
+          updatedAt: nowIso,
+        };
         return {
           kind: 'assistant_reply',
-          text: buildLearningLaunchRecap(tutoringLanguage, type, itemCount),
-          pending: {
+          text: buildLearningLaunchRecap(
+            tutoringLanguage,
             type,
-            step: 'awaiting_launch_confirm',
             itemCount,
-            updatedAt: nowIso,
-          },
+            nextPending.examType,
+          ),
+          pending: nextPending,
         };
       }
       return {
         kind: 'needs_analysis',
         pending: {
+          ...pendingWithExamType,
           type,
           step: 'analyzing',
           updatedAt: nowIso,
@@ -267,7 +291,7 @@ function advancePendingDialogue(
       return {
         kind: 'assistant_reply',
         text: buildLearningAnalyzingMessage(tutoringLanguage),
-        pending: { ...pending, type, updatedAt: nowIso },
+        pending: { ...pendingWithExamType, type, updatedAt: nowIso },
       };
     }
     case 'awaiting_focus_selection': {
@@ -284,13 +308,14 @@ function advancePendingDialogue(
         return {
           kind: 'assistant_reply',
           text: `${invalidText}${listText}`,
-          pending: { ...pending, type, updatedAt: nowIso },
+          pending: { ...pendingWithExamType, type, updatedAt: nowIso },
         };
       }
       return {
         kind: 'assistant_reply',
         text: buildLearningCountPrompt(tutoringLanguage, type),
         pending: {
+          ...pendingWithExamType,
           type,
           step: 'awaiting_count',
           selectedFocusAreaIds: parsed.focusAreaIds,
@@ -304,13 +329,14 @@ function advancePendingDialogue(
         return {
           kind: 'assistant_reply',
           text: buildTopicFallbackPrompt(tutoringLanguage, type),
-          pending: { ...pending, type, updatedAt: nowIso },
+          pending: { ...pendingWithExamType, type, updatedAt: nowIso },
         };
       }
       return {
         kind: 'assistant_reply',
         text: buildLearningCountPrompt(tutoringLanguage, type),
         pending: {
+          ...pendingWithExamType,
           type,
           step: 'awaiting_count',
           topicHint,
@@ -324,19 +350,25 @@ function advancePendingDialogue(
         return {
           kind: 'assistant_reply',
           text: buildLearningInvalidCountMessage(tutoringLanguage, type),
-          pending: { ...pending, type, updatedAt: nowIso },
+          pending: { ...pendingWithExamType, type, updatedAt: nowIso },
         };
       }
+      const nextPending = {
+        ...pendingWithExamType,
+        type,
+        step: 'awaiting_launch_confirm' as const,
+        itemCount,
+        updatedAt: nowIso,
+      };
       return {
         kind: 'assistant_reply',
-        text: buildLearningLaunchRecap(tutoringLanguage, type, itemCount),
-        pending: {
-          ...pending,
+        text: buildLearningLaunchRecap(
+          tutoringLanguage,
           type,
-          step: 'awaiting_launch_confirm',
           itemCount,
-          updatedAt: nowIso,
-        },
+          nextPending.examType,
+        ),
+        pending: nextPending,
       };
     }
     case 'awaiting_launch_confirm': {
@@ -344,25 +376,44 @@ function advancePendingDialogue(
         return {
           kind: 'assistant_reply',
           text: buildLearningLaunchClarifyMessage(tutoringLanguage),
-          pending: { ...pending, type, updatedAt: nowIso },
+          pending: { ...pendingWithExamType, type, updatedAt: nowIso },
         };
       }
       const itemCount =
-        pending.itemCount ?? LEARNING_SESSION_ITEM_LIMITS[type].defaultCount;
+        pendingWithExamType.itemCount ?? LEARNING_SESSION_ITEM_LIMITS[type].defaultCount;
       return {
         kind: 'generate',
         pending: null,
         type,
         itemCount,
-        ...(pending.topicHint !== undefined ? { topicHint: pending.topicHint } : {}),
-        ...(pending.selectedFocusAreaIds !== undefined
-          ? { selectedFocusAreaIds: pending.selectedFocusAreaIds }
+        ...(pendingWithExamType.topicHint !== undefined
+          ? { topicHint: pendingWithExamType.topicHint }
+          : {}),
+        ...(pendingWithExamType.examType !== undefined
+          ? { examType: pendingWithExamType.examType }
+          : {}),
+        ...(pendingWithExamType.selectedFocusAreaIds !== undefined
+          ? { selectedFocusAreaIds: pendingWithExamType.selectedFocusAreaIds }
           : {}),
       };
     }
     default: {
-      const exhaustive: never = pending.step;
+      const exhaustive: never = pendingWithExamType.step;
       return exhaustive;
     }
   }
+}
+
+function applyExamTypeToPending(
+  pending: PendingLearningGeneration,
+  message: string,
+): PendingLearningGeneration {
+  const examType = resolveLearningExamType(message, pending.examType);
+  if (!examType) {
+    return pending;
+  }
+  if (examType === pending.examType) {
+    return pending;
+  }
+  return { ...pending, examType };
 }

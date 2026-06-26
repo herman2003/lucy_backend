@@ -50,7 +50,10 @@ export class CorpusStudyAnalyzerService {
     private readonly llmPort: LlmPort,
   ) {}
 
-  async analyze(uid: string): Promise<CorpusStudyPlan> {
+  async analyze(
+    uid: string,
+    options?: { examType?: string },
+  ): Promise<CorpusStudyPlan> {
     const learnerProfile = await this.chatPrerequisites.requireLearnerProfile(uid);
     await this.chatPrerequisites.requireActiveDocuments(uid);
 
@@ -75,7 +78,10 @@ export class CorpusStudyAnalyzerService {
 
     const validationContext = buildValidationContext(hits);
     const outlineEntries = buildDocumentOutlinePromptEntries(documents);
-    const systemPrompt = this.prompts.getCorpusStudyAnalyzerSystemPrompt(learnerProfile);
+    const systemPrompt = this.prompts.getCorpusStudyAnalyzerSystemPrompt(
+      learnerProfile,
+      options?.examType,
+    );
     const userPrompt = buildCorpusStudyUserPrompt(learnerProfile, hits, outlineEntries);
 
     let lastError: LucyApiError | null = null;

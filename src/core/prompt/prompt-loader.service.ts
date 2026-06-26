@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import type { LearnerProfile } from '../../features/onboarding/domain/learner-profile.enums';
 import { buildDifficultyGuidance } from './learner-generation-prompt.util';
+import { buildExamTypePromptContext } from '../../features/learning-sessions/utils/learning-exam-type.util';
 
 export type ValidateAnswerUserPromptVars = {
   locale: string;
@@ -67,30 +68,36 @@ export class PromptLoaderService implements OnModuleInit {
   getQuizGeneratorSystemPrompt(
     learnerProfile: LearnerProfile,
     itemCount: number,
+    examType?: string,
   ): string {
     return renderHandlebarsTemplate(
       this.quizGeneratorSystemTemplate,
-      buildLearningGeneratorTemplateVars(learnerProfile, itemCount),
+      buildLearningGeneratorTemplateVars(learnerProfile, itemCount, examType),
     );
   }
 
   getFlashcardsGeneratorSystemPrompt(
     learnerProfile: LearnerProfile,
     itemCount: number,
+    examType?: string,
   ): string {
     return renderHandlebarsTemplate(
       this.flashcardsGeneratorSystemTemplate,
-      buildLearningGeneratorTemplateVars(learnerProfile, itemCount),
+      buildLearningGeneratorTemplateVars(learnerProfile, itemCount, examType),
     );
   }
 
-  getCorpusStudyAnalyzerSystemPrompt(learnerProfile: LearnerProfile): string {
+  getCorpusStudyAnalyzerSystemPrompt(
+    learnerProfile: LearnerProfile,
+    examType?: string,
+  ): string {
     return renderHandlebarsTemplate(this.corpusStudyAnalyzerSystemTemplate, {
       tutoring_language: learnerProfile.tutoring_language,
       explanation_style: learnerProfile.explanation_style,
       feedback_tone: learnerProfile.feedback_tone,
       learning_goal: learnerProfile.learning_goal,
       self_assessed_level: learnerProfile.self_assessed_level,
+      exam_type_context: buildExamTypePromptContext(examType),
     });
   }
 
@@ -151,6 +158,7 @@ export function renderHandlebarsTemplate(
 function buildLearningGeneratorTemplateVars(
   learnerProfile: LearnerProfile,
   itemCount: number,
+  examType?: string,
 ): Record<string, string> {
   return {
     itemCount: String(itemCount),
@@ -162,5 +170,6 @@ function buildLearningGeneratorTemplateVars(
     explanation_style: learnerProfile.explanation_style,
     feedback_tone: learnerProfile.feedback_tone,
     difficulty_guidance: buildDifficultyGuidance(learnerProfile.self_assessed_level),
+    exam_type_context: buildExamTypePromptContext(examType),
   };
 }

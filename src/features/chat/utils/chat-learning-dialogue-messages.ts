@@ -75,16 +75,35 @@ export function buildLearningLaunchRecap(
   tutoringLanguage: TutoringLanguage,
   type: LearningSessionType,
   itemCount: number,
+  examType?: string,
 ): string {
   const lang = resolveLanguage(tutoringLanguage);
   const label = typeLabel(lang, type);
+  const examClause = formatExamTypeRecapClause(lang, examType);
   switch (lang) {
     case 'en':
-      return `**Summary**: ${itemCount} ${label} from all your active documents. Should I generate them? Reply **yes** or **cancel**.`;
+      return `**Summary**: ${itemCount} ${label} from all your active documents${examClause}. Should I generate them? Reply **yes** or **cancel**.`;
     case 'de':
-      return `**Zusammenfassung**: ${itemCount} ${label} aus allen aktiven Dokumenten. Soll ich starten? Antworte mit **ja** oder **abbrechen**.`;
+      return `**Zusammenfassung**: ${itemCount} ${label} aus allen aktiven Dokumenten${examClause}. Soll ich starten? Antworte mit **ja** oder **abbrechen**.`;
     default:
-      return `**Récap** : ${itemCount} ${type === 'quiz' ? 'questions' : 'cartes'} sur tous tes documents actifs. Je lance ? Réponds **oui** ou **annule**.`;
+      return `**Récap** : ${itemCount} ${type === 'quiz' ? 'questions' : 'cartes'} sur tous tes documents actifs${examClause}. Je lance ? Réponds **oui** ou **annule**.`;
+  }
+}
+
+function formatExamTypeRecapClause(
+  language: 'fr' | 'en' | 'de',
+  examType?: string,
+): string {
+  if (!examType) {
+    return '';
+  }
+  switch (language) {
+    case 'en':
+      return ` for a **${examType}**`;
+    case 'de':
+      return ` für **${examType}**`;
+    default:
+      return ` pour un **${examType}**`;
   }
 }
 

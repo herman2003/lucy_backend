@@ -39,6 +39,38 @@ describe('chat-learning-dialogue (LEARN-06)', () => {
     });
   });
 
+  it('captures optional exam type from the first message (LEARN-10b)', () => {
+    const outcome = processLearningDialogueTurn({
+      message: 'fais-moi un quiz pour mon partiel',
+      pending: null,
+      tutoringLanguage: 'fr',
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'assistant_reply',
+      pending: { type: 'quiz', step: 'awaiting_confirm', examType: 'partiel' },
+    });
+  });
+
+  it('includes exam type in launch recap when provided', () => {
+    const outcome = processLearningDialogueTurn({
+      message: '10',
+      pending: {
+        type: 'quiz',
+        step: 'awaiting_count',
+        examType: 'dissertation',
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      nowIso: now,
+    });
+
+    expect(outcome && outcome.kind === 'assistant_reply' ? outcome.text : '').toContain(
+      'dissertation',
+    );
+  });
+
   it('starts corpus analysis after confirmation', () => {
     const outcome = processLearningDialogueTurn({
       message: 'oui',
@@ -137,6 +169,28 @@ describe('chat-learning-dialogue (LEARN-06)', () => {
       pending: null,
       type: 'flashcards',
       itemCount: 10,
+    });
+  });
+
+  it('passes examType to generate outcome (LEARN-10b)', () => {
+    const outcome = processLearningDialogueTurn({
+      message: 'oui',
+      pending: {
+        type: 'quiz',
+        step: 'awaiting_launch_confirm',
+        itemCount: 5,
+        examType: 'oral',
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'generate',
+      type: 'quiz',
+      itemCount: 5,
+      examType: 'oral',
     });
   });
 
