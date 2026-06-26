@@ -2,6 +2,7 @@ import {
   buildLearningSessionCreatedReply,
   detectLearningGenerationIntent,
   detectLearningRegenerationIntent,
+  detectRevisionPlanIntent,
   parseLearningItemCount,
 } from './chat-learning-generation';
 
@@ -22,6 +23,14 @@ describe('chat-learning-generation (LEARN-01d)', () => {
 
   it('returns null for normal tutoring questions', () => {
     expect(detectLearningGenerationIntent("Qu'est-ce que l'entropie ?")).toBeNull();
+  });
+
+  it('detects revision plan intent without triggering quiz (LEARN-10c)', () => {
+    expect(detectRevisionPlanIntent('fais-moi un plan de révision')).toBe(true);
+    expect(detectRevisionPlanIntent('revision plan for my exam')).toBe(true);
+    expect(detectRevisionPlanIntent('erstell einen Lernplan')).toBe(true);
+    expect(detectRevisionPlanIntent('fais-moi un quiz')).toBe(false);
+    expect(detectRevisionPlanIntent("Qu'est-ce que l'entropie ?")).toBe(false);
   });
 
   it('detects regeneration intent from common phrases (LEARN-09c)', () => {

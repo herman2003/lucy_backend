@@ -15,6 +15,7 @@ import {
 } from '../chat.constants';
 import {
   buildLearningSessionCreatedReply,
+  detectRevisionPlanIntent,
 } from '../utils/chat-learning-generation';
 import {
   buildFocusSelectionMessage,
@@ -22,9 +23,12 @@ import {
   buildLearningGenerationFailedMessage,
   buildLearningGeneratingMessage,
   buildLearningRegeneratingMessage,
+  buildRevisionPlanText,
+  buildRevisionPlanUnavailableMessage,
   buildTopicFallbackPrompt,
 } from '../utils/chat-learning-dialogue-messages';
 import { readLearningGenerationAdviceKey } from '../../learning-sessions/utils/learning-generation-failure.error';
+import { detectLearningExamType } from '../../learning-sessions/utils/learning-exam-type.util';
 import { processLearningDialogueTurn } from '../utils/chat-learning-dialogue';
 import { getValidCorpusStudyPlan } from '../utils/corpus-study-plan-cache';
 import { resolveSelectedFocusAreas } from '../../learning-sessions/utils/focus-scoped-retrieval';
@@ -243,6 +247,17 @@ export class ChatStreamService {
     turn: TurnContext,
     options: CompleteTurnOptions = {},
   ): Promise<CompleteTurnResult> {
+    const revisionTurn = await this.tryCompleteRevisionPlanTurn(
+      uid,
+      chatId,
+      content,
+      turn,
+      options,
+    );
+    if (revisionTurn) {
+      return revisionTurn;
+    }
+
     const learningTurn = await this.tryCompleteLearningGenerationTurn(
       uid,
       chatId,
@@ -294,6 +309,81 @@ export class ChatStreamService {
     }
 
     return { assistantMessage, sources };
+  }
+
+  private async tryCompleteRevisionPlanTurn(
+    uid: string,
+    chatId: string,
+    content: string,
+    turn: TurnContext,
+    options: CompleteTurnOptions,
+  ): Promise<CompleteTurnResult | null> {
+    if (turn.thread.pendingLearningGeneration) {
+      return null;
+    }
+    if (!detectRevisionPlanIntent(content)) {
+      return null;
+    }
+
+    const tutoringLanguage = turn.learnerProfile.tutoring_language;
+    const examType = detectLearningExamType(content);
+    const analyzingText = buildLearningAnalyzingMessage(tutoringLanguage);
+    options.onTextDelta?.(analyzingText);
+
+    let corpusStudyPlan = getValidCorpusStudyPlan(turn.thread.corpusStudyPlan);
+    let assistantText = analyzingText;
+
+    if (!corpusStudyPlan) {
+      try {
+        corpusStudyPlan = await this.corpusStudyAnalyzer.analyze(uid, { examType });
+        await this.chatsRepository.patchThread(uid, chatId, { corpusStudyPlan });
+      } catch (error) {
+        this.logger.warn(
+          `revision plan analysis failed chatId=${chatId}: ${formatStreamErrorCause(error)}`,
+        );
+        const failureText = buildRevisionPlanUnavailableMessage(tutoringLanguage);
+        assistantText = `${analyzingText}\n\n${failureText}`;
+        options.onTextDelta?.(`\n\n${failureText}`);
+
+        const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+          id: newMessageId(),
+          role: 'assistant',
+          content: assistantText,
+          createdAt: new Date().toISOString(),
+          status: 'completed',
+          sources: [],
+        });
+
+        if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {
+          await this.chatsRepository.patchThread(uid, chatId, {
+            title: buildAutoTitle(content),
+          });
+        }
+
+        return { assistantMessage, sources: [] };
+      }
+    }
+
+    const planText = buildRevisionPlanText(tutoringLanguage, corpusStudyPlan, examType);
+    assistantText = `${analyzingText}\n\n${planText}`;
+    options.onTextDelta?.(`\n\n${planText}`);
+
+    const assistantMessage = await this.chatsRepository.appendMessage(uid, chatId, {
+      id: newMessageId(),
+      role: 'assistant',
+      content: assistantText,
+      createdAt: new Date().toISOString(),
+      status: 'completed',
+      sources: [],
+    });
+
+    if (turn.isFirstUserTurn && turn.thread.title === DEFAULT_CHAT_TITLE) {
+      await this.chatsRepository.patchThread(uid, chatId, {
+        title: buildAutoTitle(content),
+      });
+    }
+
+    return { assistantMessage, sources: [] };
   }
 
   private async tryCompleteLearningGenerationTurn(

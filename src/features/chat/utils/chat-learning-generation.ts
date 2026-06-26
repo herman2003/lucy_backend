@@ -21,6 +21,21 @@ const FLASHCARDS_INTENT_PATTERNS = [
   /generate flashcards/i,
 ];
 
+const REVISION_PLAN_INTENT_PATTERNS = [
+  /plan\s+de\s+r[eé]vision/i,
+  /plan\s+r[eé]vision/i,
+  /r[eé]vision\s+plan/i,
+  /\brevision\s+plan\b/i,
+  /fais[\s-]?moi un plan (?:de |pour )?r[eé]vis/i,
+  /génère(?:r)? (?:un |le )?plan (?:de |pour )?r[eé]vis/i,
+  /crée(?:r)? (?:un |le )?plan (?:de |pour )?r[eé]vis/i,
+  /organise(?:r)? ma r[eé]vision/i,
+  /\blernplan\b/i,
+  /erstell(?:e|en)? (?:einen )?lernplan/i,
+  /create (?:a )?revision plan/i,
+  /generate (?:a )?revision plan/i,
+];
+
 const REGENERATION_INTENT_PATTERNS = [
   /refais(?:\s+pareil)?/i,
   /recommence/i,
@@ -41,6 +56,14 @@ export function detectLearningRegenerationIntent(message: string): boolean {
     return false;
   }
   return REGENERATION_INTENT_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+export function detectRevisionPlanIntent(message: string): boolean {
+  const normalized = message.trim();
+  if (!normalized) {
+    return false;
+  }
+  return REVISION_PLAN_INTENT_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 export function detectLearningGenerationIntent(

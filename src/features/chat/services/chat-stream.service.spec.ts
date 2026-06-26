@@ -601,6 +601,32 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
     });
   });
 
+  it('returns an exportable revision plan in chat (LEARN-10c)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const analyzeSpy = jest.spyOn(corpusStudyAnalyzer, 'analyze');
+    const generateSpy = jest.spyOn(learningSessionsService, 'generate');
+
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un plan de révision'),
+    );
+
+    expect(analyzeSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy).not.toHaveBeenCalled();
+
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain(
+      'Je parcours tes documents',
+    );
+    expect(doneEvent?.data.assistantMessage.content).toContain('## Plan de révision');
+    expect(doneEvent?.data.assistantMessage.content).toContain('**1.**');
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.pendingLearningGeneration).toBeUndefined();
+    expect(updatedThread?.corpusStudyPlan?.focusAreas.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('creates flashcards session from chat and emits learning_session_created SSE', async () => {
     await finalizeUserWithProfile();
     await seedReadyActiveDocumentWithChunk();
