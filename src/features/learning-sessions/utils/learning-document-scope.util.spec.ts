@@ -50,4 +50,19 @@ describe('learning-document-scope.util (LEARN-11f)', () => {
   it('rejects invalid numbered selection', () => {
     expect(parseDocumentSelection('9', documents)).toEqual({ kind: 'invalid' });
   });
+
+  it('accepts all-documents phrases without matching a single title', () => {
+    const multiDocs: ActiveDocumentRef[] = [
+      { id: 'doc_sprint', title: 'Sprint-3-Personalized-learning-documents' },
+      { id: 'doc_thesis', title: 'Bachelorarbeit_german' },
+      { id: 'doc_pres', title: 'documentpresentation' },
+    ];
+
+    expect(parseDocumentSelection('tout les documents stp', multiDocs)).toEqual({
+      kind: 'all',
+    });
+    expect(parseDocumentSelection('alle dokumente', multiDocs)).toEqual({
+      kind: 'all',
+    });
+  });
 });

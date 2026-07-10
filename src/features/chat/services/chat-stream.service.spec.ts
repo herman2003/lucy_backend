@@ -370,7 +370,7 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
     expect(doneEvent?.data.assistantMessage.content).toContain(
       'Je parcours tes documents',
     );
-    expect(doneEvent?.data.assistantMessage.content).toContain('**1.**');
+    expect(doneEvent?.data.assistantMessage.content).toContain('1. **');
 
     const updatedThread = await chatsRepository.getThread(uid, thread.id);
     expect(updatedThread?.pendingLearningGeneration).toMatchObject({
@@ -620,7 +620,7 @@ describe('ChatStreamService learning generation (LEARN-01d)', () => {
       'Je parcours tes documents',
     );
     expect(doneEvent?.data.assistantMessage.content).toContain('## Plan de révision');
-    expect(doneEvent?.data.assistantMessage.content).toContain('**1.**');
+    expect(doneEvent?.data.assistantMessage.content).toContain('1. **');
 
     const updatedThread = await chatsRepository.getThread(uid, thread.id);
     expect(updatedThread?.pendingLearningGeneration).toBeUndefined();

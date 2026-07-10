@@ -2,6 +2,7 @@ import type { LearningSessionType } from '../../learning-sessions/domain/learnin
 import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import { resolveLearningExamType } from '../../learning-sessions/utils/learning-exam-type.util';
 import {
+  isAllDocumentsSelection,
   parseDocumentSelection,
   resolveLearningDocumentScope,
   type ActiveDocumentRef,
@@ -11,6 +12,10 @@ import type { TutoringLanguage } from '../../onboarding/domain/learner-profile.e
 import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
 import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
 import { parseFocusSelection } from './chat-focus-selection.parser';
+import {
+  buildFocusRefinementHint,
+  parseFocusRefinementRequest,
+} from './chat-focus-refinement.parser';
 import {
   buildLearningCancelledMessage,
   buildLearningConfirmPrompt,
@@ -362,6 +367,17 @@ function advancePendingDialogue(
           pending: { ...pendingWithExamType, type, updatedAt: nowIso },
         };
       }
+      if (parsed.kind === 'all') {
+        return {
+          kind: 'needs_analysis',
+          pending: {
+            ...pendingWithExamType,
+            type,
+            step: 'analyzing',
+            updatedAt: nowIso,
+          },
+        };
+      }
       const withDocument = {
         ...pendingWithExamType,
         type,
@@ -403,30 +419,49 @@ function advancePendingDialogue(
     case 'awaiting_focus_selection': {
       const focusAreas = corpusStudyPlan?.focusAreas ?? [];
       const parsed = parseFocusSelection(message, focusAreas);
-      if (parsed.kind === 'invalid' || focusAreas.length === 0) {
-        const invalidText = buildFocusSelectionInvalidMessage(tutoringLanguage);
-        const listText =
-          corpusStudyPlan !== null &&
-          corpusStudyPlan !== undefined &&
-          corpusStudyPlan.focusAreas.length > 0
-            ? `\n\n${buildFocusSelectionMessage(tutoringLanguage, corpusStudyPlan, type)}`
-            : '';
+      if (parsed.kind === 'selected') {
         return {
           kind: 'assistant_reply',
-          text: `${invalidText}${listText}`,
+          text: buildLearningCountPrompt(tutoringLanguage, type),
+          pending: {
+            ...pendingWithExamType,
+            type,
+            step: 'awaiting_count',
+            selectedFocusAreaIds: parsed.focusAreaIds,
+            updatedAt: nowIso,
+          },
+        };
+      }
+
+      const refinement = parseFocusRefinementRequest(message);
+      if (refinement.kind !== 'none' && focusAreas.length > 0) {
+        return {
+          kind: 'needs_analysis',
+          pending: {
+            ...pendingWithExamType,
+            type,
+            step: 'analyzing',
+            focusRefinementHint: buildFocusRefinementHint(refinement),
+            updatedAt: nowIso,
+          },
+        };
+      }
+
+      if (focusAreas.length === 0) {
+        const invalidText = buildFocusSelectionInvalidMessage(tutoringLanguage);
+        return {
+          kind: 'assistant_reply',
+          text: invalidText,
           pending: { ...pendingWithExamType, type, updatedAt: nowIso },
         };
       }
+
+      const invalidText = buildFocusSelectionInvalidMessage(tutoringLanguage);
+      const listText = `\n\n${buildFocusSelectionMessage(tutoringLanguage, corpusStudyPlan!, type)}`;
       return {
         kind: 'assistant_reply',
-        text: buildLearningCountPrompt(tutoringLanguage, type),
-        pending: {
-          ...pendingWithExamType,
-          type,
-          step: 'awaiting_count',
-          selectedFocusAreaIds: parsed.focusAreaIds,
-          updatedAt: nowIso,
-        },
+        text: `${invalidText}${listText}`,
+        pending: { ...pendingWithExamType, type, updatedAt: nowIso },
       };
     }
     case 'awaiting_topic_fallback': {
@@ -541,6 +576,10 @@ function applyDocumentScopeToPending(
   activeDocuments?: ActiveDocumentRef[],
 ): PendingLearningGeneration {
   if (pending.documentId !== undefined || !activeDocuments || activeDocuments.length <= 1) {
+    return pending;
+  }
+
+  if (isAllDocumentsSelection(message)) {
     return pending;
   }
 

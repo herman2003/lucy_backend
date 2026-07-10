@@ -88,16 +88,19 @@ describe('CorpusStudyAnalyzerService (LEARN-07a)', () => {
     await onboardingRepo.finalizeOnboarding(uid);
   }
 
-  async function seedReadyActiveDocument(): Promise<string> {
-    const doc = await documentsRepo.create(uid, {
+  async function seedReadyActiveDocument(
+    targetDocumentsRepo: InMemoryDocumentsRepository = documentsRepo,
+    targetChunksRepo: InMemoryDocumentChunksRepository = chunksRepo,
+  ): Promise<string> {
+    const doc = await targetDocumentsRepo.create(uid, {
       title: 'Thermodynamique',
       fileName: 't.txt',
       mimeType: 'text/plain',
       byteSize: 10,
     });
-    await documentsRepo.updateStatus(uid, doc.id, 'ready');
-    await documentsRepo.setSearchEnabled(uid, doc.id, true);
-    await chunksRepo.replaceChunks(uid, doc.id, [
+    await targetDocumentsRepo.updateStatus(uid, doc.id, 'ready');
+    await targetDocumentsRepo.setSearchEnabled(uid, doc.id, true);
+    await targetChunksRepo.replaceChunks(uid, doc.id, [
       {
         id: 'chunk_0',
         ordinal: 0,
@@ -239,5 +242,144 @@ describe('CorpusStudyAnalyzerService (LEARN-07a)', () => {
     expect(capturedUserPrompt).toContain('DOCUMENT_OUTLINES_JSON=');
     expect(capturedUserPrompt).toContain('Chapitre 1 — Entropie');
     expect(capturedUserPrompt).toContain('chunk_0');
+    expect(capturedUserPrompt).toContain('ALLOWED_CHUNK_ORDINALS_JSON=');
+  });
+
+  it('returns a synthetic plan when the LLM keeps failing validation', async () => {
+    const failingLlm: LlmPort = {
+      generateStructured: async () => {
+        throw new Error('LLM unavailable');
+      },
+    };
+
+    const usersStore = new InMemoryUsersStore();
+    onboardingRepo = new InMemoryOnboardingUsersRepository(usersStore);
+
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      imports: [AppConfigModule, LlmModule, PromptModule],
+      providers: [
+        CorpusStudyAnalyzerService,
+        ChatPrerequisitesService,
+        RetrievalService,
+        {
+          provide: USERS_PROFILE_REPOSITORY,
+          useValue: new InMemoryUsersProfileRepository(usersStore),
+        },
+        InMemoryDocumentsStorage,
+        InMemoryDocumentsRepository,
+        InMemoryDocumentChunksRepository,
+        { provide: DOCUMENTS_STORAGE, useExisting: InMemoryDocumentsStorage },
+        { provide: DOCUMENTS_REPOSITORY, useExisting: InMemoryDocumentsRepository },
+        {
+          provide: DOCUMENT_CHUNKS_REPOSITORY,
+          useExisting: InMemoryDocumentChunksRepository,
+        },
+        { provide: EMBEDDING_PORT, useClass: FakeEmbeddingAdapter },
+        { provide: LLM_PORT, useValue: failingLlm },
+      ],
+    })
+      .overrideProvider(LUCY_CONFIG)
+      .useValue(
+        loadLucyConfig({
+          NODE_ENV: 'test',
+          FIREBASE_AUTH_MODE: 'dev',
+          LLM_PROVIDER: 'mock',
+          FIRESTORE_PROVIDER: 'memory',
+        }),
+      )
+      .compile();
+
+    const fallbackService = moduleRef.get(CorpusStudyAnalyzerService);
+    const fallbackDocumentsRepo = moduleRef.get(InMemoryDocumentsRepository);
+    const fallbackChunksRepo = moduleRef.get(InMemoryDocumentChunksRepository);
+    moduleRef.get(PromptLoaderService).onModuleInit();
+
+    await onboardingRepo.saveAnalyzeSuccess(uid, validProfile, 'Résumé.');
+    await onboardingRepo.finalizeOnboarding(uid);
+    await seedReadyActiveDocument(fallbackDocumentsRepo, fallbackChunksRepo);
+
+    const plan = await fallbackService.analyze(uid);
+
+    expect(plan.focusAreas.length).toBeGreaterThanOrEqual(1);
+    expect(plan.focusAreas[0]?.documentTitle).toBe('Thermodynamique');
+  });
+
+  it('clamps invalid ordinal ranges from the LLM instead of failing', async () => {
+    let attempts = 0;
+    const invalidOrdinalLlm: LlmPort = {
+      generateStructured: async (input) => {
+        attempts += 1;
+        const documentIdMatch = input.userPrompt.match(
+          /DOCUMENTS_JSON=\[\{"id":"([^"]+)"/,
+        );
+        const documentId = documentIdMatch?.[1] ?? 'doc_missing';
+        const focusArea = {
+          id: 'focus_1',
+          documentId,
+          label: 'Section inventée',
+          ordinalStart: 9,
+          ordinalEnd: 12,
+          importance: 'high' as const,
+          rationale: 'Important.',
+          keyConcepts: ['concept'],
+        };
+        return {
+          rawText: JSON.stringify({ focusAreas: [focusArea] }),
+          parsedJson: { focusAreas: [focusArea] },
+        };
+      },
+    };
+
+    const usersStore = new InMemoryUsersStore();
+    onboardingRepo = new InMemoryOnboardingUsersRepository(usersStore);
+
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      imports: [AppConfigModule, LlmModule, PromptModule],
+      providers: [
+        CorpusStudyAnalyzerService,
+        ChatPrerequisitesService,
+        RetrievalService,
+        {
+          provide: USERS_PROFILE_REPOSITORY,
+          useValue: new InMemoryUsersProfileRepository(usersStore),
+        },
+        InMemoryDocumentsStorage,
+        InMemoryDocumentsRepository,
+        InMemoryDocumentChunksRepository,
+        { provide: DOCUMENTS_STORAGE, useExisting: InMemoryDocumentsStorage },
+        { provide: DOCUMENTS_REPOSITORY, useExisting: InMemoryDocumentsRepository },
+        {
+          provide: DOCUMENT_CHUNKS_REPOSITORY,
+          useExisting: InMemoryDocumentChunksRepository,
+        },
+        { provide: EMBEDDING_PORT, useClass: FakeEmbeddingAdapter },
+        { provide: LLM_PORT, useValue: invalidOrdinalLlm },
+      ],
+    })
+      .overrideProvider(LUCY_CONFIG)
+      .useValue(
+        loadLucyConfig({
+          NODE_ENV: 'test',
+          FIREBASE_AUTH_MODE: 'dev',
+          LLM_PROVIDER: 'mock',
+          FIRESTORE_PROVIDER: 'memory',
+        }),
+      )
+      .compile();
+
+    const clampService = moduleRef.get(CorpusStudyAnalyzerService);
+    const clampDocumentsRepo = moduleRef.get(InMemoryDocumentsRepository);
+    const clampChunksRepo = moduleRef.get(InMemoryDocumentChunksRepository);
+    moduleRef.get(PromptLoaderService).onModuleInit();
+
+    await onboardingRepo.saveAnalyzeSuccess(uid, validProfile, 'Résumé.');
+    await onboardingRepo.finalizeOnboarding(uid);
+    await seedReadyActiveDocument(clampDocumentsRepo, clampChunksRepo);
+
+    const plan = await clampService.analyze(uid);
+
+    expect(attempts).toBeGreaterThanOrEqual(1);
+    expect(plan.focusAreas[0]?.ordinalStart).toBe(0);
+    expect(plan.focusAreas[0]?.ordinalEnd).toBe(0);
   });
 });

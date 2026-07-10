@@ -14,6 +14,10 @@ export type BuildRevisionPlanOptions = {
   now?: Date;
 };
 
+export function joinMarkdownBlocks(lines: string[]): string {
+  return lines.join('\n\n');
+}
+
 function resolveLanguage(language: TutoringLanguage): 'fr' | 'en' | 'de' {
   if (language === 'en' || language === 'de') {
     return language;
@@ -135,14 +139,15 @@ export function buildDocumentSelectionMessage(
   const lang = resolveLanguage(tutoringLanguage);
   const label = typeLabel(lang, type);
   const lines = documents.map(
-    (doc, index) => `**${index + 1}.** ${doc.title}`,
+    (doc, index) => `${index + 1}. **${doc.title}**`,
   );
+  const listBlock = joinMarkdownBlocks(lines);
   switch (lang) {
     case 'en':
       return [
         `You have several active documents. Which one should I use for this **${label}**?`,
         '',
-        ...lines,
+        listBlock,
         '',
         'Reply with a **number** or the **document title**.',
       ].join('\n');
@@ -150,7 +155,7 @@ export function buildDocumentSelectionMessage(
       return [
         `Du hast mehrere aktive Dokumente. Welches soll ich für ${label === 'quiz' ? 'dieses Quiz' : 'diese Karteikarten'} verwenden?`,
         '',
-        ...lines,
+        listBlock,
         '',
         'Antworte mit einer **Zahl** oder dem **Dokumenttitel**.',
       ].join('\n');
@@ -158,7 +163,7 @@ export function buildDocumentSelectionMessage(
       return [
         `Tu as plusieurs documents actifs. Lequel dois-je utiliser pour ${type === 'quiz' ? 'ce quiz' : 'ces cartes'} ?`,
         '',
-        ...lines,
+        listBlock,
         '',
         'Réponds par un **numéro** ou le **titre du document**.',
       ].join('\n');
@@ -315,7 +320,6 @@ function formatFocusAreaLine(
   area: StudyFocusArea,
   lang: 'fr' | 'en' | 'de',
 ): string {
-  const number = `**${index + 1}.**`;
   const importance =
     area.importance === 'high'
       ? lang === 'en'
@@ -344,7 +348,7 @@ function formatFocusAreaLine(
           ? ` · Konzepte: ${area.keyConcepts.join(', ')}`
           : ` · concepts : ${area.keyConcepts.join(', ')}`
       : '';
-  return `${number} ${area.label}${pages} — *${importance}* — ${area.rationale}${concepts}`;
+  return `${index + 1}. **${area.label}**${pages} — *${importance}* — ${area.rationale}${concepts}`;
 }
 
 export function buildFocusSelectionMessage(
@@ -357,31 +361,35 @@ export function buildFocusSelectionMessage(
   const lines = plan.focusAreas.map((area, index) =>
     formatFocusAreaLine(index, area, lang),
   );
+  const listBlock = joinMarkdownBlocks(lines);
 
   switch (lang) {
     case 'en':
       return [
         `Here is what I recommend for your **${label}**:`,
         '',
-        ...lines,
+        listBlock,
         '',
         'Which parts should we use? Reply with numbers (e.g. **1 and 2**), **all**, or **most important**.',
+        'Not happy with this list? Say **other suggestions** or **more on [topic]** and I will adjust.',
       ].join('\n');
     case 'de':
       return [
         `Das empfehle ich für dein **${label}**:`,
         '',
-        ...lines,
+        listBlock,
         '',
         'Welche Teile sollen wir nehmen? Antworte mit Nummern (z. B. **1 und 2**), **alle** oder **wichtigsten**.',
+        'Passt die Liste nicht? Schreib **andere Vorschläge** oder **mehr über [Thema]** — ich passe sie an.',
       ].join('\n');
     default:
       return [
         `Voici ce que je te recommande pour ton **${label}** :`,
         '',
-        ...lines,
+        listBlock,
         '',
         'Quelles parties veux-tu travailler ? Réponds avec des numéros (ex. **1 et 2**), **tout**, ou **les plus importantes**.',
+        'La liste ne te convient pas ? Dis **autre proposition** ou **plus sur [sujet]** — je la réajuste.',
       ].join('\n');
   }
 }
@@ -396,6 +404,7 @@ export function buildRevisionPlanText(
   const lines = plan.focusAreas.map((area, index) =>
     formatFocusAreaLine(index, area, lang),
   );
+  const listBlock = joinMarkdownBlocks(lines);
   const examType = resolvedOptions.examType;
   const examSuffix =
     examType !== undefined
@@ -414,7 +423,7 @@ export function buildRevisionPlanText(
           '',
           'Based on your active documents, here is a prioritized study plan you can copy:',
           '',
-          ...lines,
+          listBlock,
           '',
           '**Next steps:** ask for a **quiz** or **flashcards** on any section (e.g. "quiz on 1 and 2").',
         ];
@@ -424,7 +433,7 @@ export function buildRevisionPlanText(
           '',
           'Auf Basis deiner aktiven Dokumente — ein priorisierter Plan zum Kopieren:',
           '',
-          ...lines,
+          listBlock,
           '',
           '**Nächste Schritte:** Bitte um ein **Quiz** oder **Karteikarten** zu einem Abschnitt (z. B. „Quiz zu 1 und 2“).',
         ];
@@ -434,7 +443,7 @@ export function buildRevisionPlanText(
           '',
           'D’après tes documents actifs, voici un plan priorisé que tu peux copier :',
           '',
-          ...lines,
+          listBlock,
           '',
           '**Prochaines étapes :** demande un **quiz** ou des **cartes** sur une section (ex. « quiz sur 1 et 2 »).',
         ];
@@ -489,11 +498,11 @@ export function buildFocusSelectionInvalidMessage(
   const lang = resolveLanguage(tutoringLanguage);
   switch (lang) {
     case 'en':
-      return 'I did not understand your selection. Use numbers (e.g. **1 and 3**), **all**, or **most important**.';
+      return 'I did not understand your selection. Use numbers (e.g. **1 and 3**), **all**, **most important**, or ask for **other suggestions** / **more on [topic]**.';
     case 'de':
-      return 'Ich habe deine Auswahl nicht verstanden. Nutze Nummern (z. B. **1 und 3**), **alle** oder **wichtigsten**.';
+      return 'Ich habe deine Auswahl nicht verstanden. Nutze Nummern (z. B. **1 und 3**), **alle**, **wichtigsten**, oder bitte um **andere Vorschläge** / **mehr über [Thema]**.';
     default:
-      return 'Je n’ai pas compris ta sélection. Indique des numéros (ex. **1 et 3**), **tout**, ou **les plus importantes**.';
+      return 'Je n’ai pas compris ta sélection. Indique des numéros (ex. **1 et 3**), **tout**, **les plus importantes**, ou demande **autre proposition** / **plus sur [sujet]**.';
   }
 }
 

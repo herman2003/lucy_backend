@@ -25,7 +25,7 @@ describe('buildRevisionPlanText (LEARN-10c)', () => {
   it('formats a copyable markdown revision plan in French', () => {
     const text = buildRevisionPlanText('fr', samplePlan);
     expect(text).toContain('## Plan de révision');
-    expect(text).toContain('**1.** Entropie');
+    expect(text).toContain('1. **Entropie**');
     expect(text).toContain('priorité haute');
     expect(text).toContain('quiz');
   });

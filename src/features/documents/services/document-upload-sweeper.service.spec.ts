@@ -60,4 +60,19 @@ describe('DocumentUploadSweeperService', () => {
 
     await expect(sweeper.sweepAbandonedUploads()).resolves.toBe(0);
   });
+
+  it('returns 0 when Firestore is temporarily unreachable', async () => {
+    const repository = {
+      listByStatus: jest.fn().mockRejectedValue({
+        code: 14,
+        message: 'Name resolution failed for target dns:firestore.googleapis.com:443',
+      }),
+    };
+    const sweeper = new DocumentUploadSweeperService(
+      repository as never,
+      {} as never,
+    );
+
+    await expect(sweeper.sweepAbandonedUploads()).resolves.toBe(0);
+  });
 });

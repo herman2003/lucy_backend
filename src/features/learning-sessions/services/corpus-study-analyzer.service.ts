@@ -17,9 +17,13 @@ import {
 import type { SearchRetrievalHitDto } from '../../retrieval/dto/search-retrieval.dto';
 import { RetrievalService } from '../../retrieval/services/retrieval.service';
 import { ChatPrerequisitesService } from '../../chat/services/chat-prerequisites.service';
-import type { CorpusStudyPlan } from '../domain/study-focus-area.types';
+import type {
+  CorpusStudyPlan,
+  StudyFocusArea,
+} from '../domain/study-focus-area.types';
 import {
   CORPUS_STUDY_ANALYSIS_JSON_SCHEMA,
+  CORPUS_STUDY_ANALYSIS_MAX_ATTEMPTS,
   CORPUS_STUDY_MAX_EXCERPTS,
   CORPUS_STUDY_PLAN_TTL_MS,
   CORPUS_STUDY_SAMPLE_QUERIES,
@@ -31,6 +35,8 @@ import {
   sampleExcerptsFromOutlines,
   type DocumentOutlinePromptEntry,
 } from '../utils/corpus-study-outline.util';
+import { buildAllowedChunkOrdinalsJson } from '../utils/corpus-study-ordinal.util';
+import { buildSyntheticCorpusStudyPlanFromExcerpts } from '../utils/corpus-study-synthetic-plan.util';
 
 const CORPUS_STUDY_USER_MARKER = 'CORPUS_STUDY_ANALYSIS=true';
 
@@ -52,7 +58,12 @@ export class CorpusStudyAnalyzerService {
 
   async analyze(
     uid: string,
-    options?: { examType?: string; documentIds?: string[] },
+    options?: {
+      examType?: string;
+      documentIds?: string[];
+      refinementHint?: string;
+      previousFocusAreas?: StudyFocusArea[];
+    },
   ): Promise<CorpusStudyPlan> {
     const learnerProfile = await this.chatPrerequisites.requireLearnerProfile(uid);
     await this.chatPrerequisites.requireActiveDocuments(uid);
@@ -90,14 +101,25 @@ export class CorpusStudyAnalyzerService {
       learnerProfile,
       options?.examType,
     );
-    const userPrompt = buildCorpusStudyUserPrompt(learnerProfile, hits, outlineEntries);
+    const userPrompt = buildCorpusStudyUserPrompt(
+      learnerProfile,
+      hits,
+      outlineEntries,
+      validationContext,
+      options,
+    );
 
     let lastError: LucyApiError | null = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    let lastErrorMessage: string | null = null;
+    for (let attempt = 0; attempt < CORPUS_STUDY_ANALYSIS_MAX_ATTEMPTS; attempt += 1) {
       try {
+        const retryUserPrompt = buildCorpusStudyRetryUserPrompt(
+          userPrompt,
+          lastErrorMessage,
+        );
         const response = await this.llmPort.generateStructured({
           systemPrompt,
-          userPrompt,
+          userPrompt: retryUserPrompt,
           responseJsonSchema: CORPUS_STUDY_ANALYSIS_JSON_SCHEMA,
         });
         const focusAreas = parseGeneratedCorpusStudyPlan(
@@ -115,10 +137,30 @@ export class CorpusStudyAnalyzerService {
         };
       } catch (error) {
         lastError = toAnalysisError(error);
+        lastErrorMessage = lastError.message;
         this.logger.warn(
           `corpus study analysis attempt ${attempt + 1} failed: ${lastError.message}`,
         );
       }
+    }
+
+    const syntheticFocusAreas = buildSyntheticCorpusStudyPlanFromExcerpts(
+      hits,
+      validationContext,
+    );
+    if (syntheticFocusAreas.length > 0) {
+      this.logger.warn(
+        'corpus study analysis using synthetic fallback plan after LLM failures',
+      );
+      const generatedAt = new Date().toISOString();
+      return {
+        generatedAt,
+        expiresAt: new Date(Date.now() + CORPUS_STUDY_PLAN_TTL_MS).toISOString(),
+        focusAreas: syntheticFocusAreas,
+        ...(options?.documentIds?.length === 1
+          ? { scopeDocumentId: options.documentIds[0] }
+          : {}),
+      };
     }
 
     throw lastError ?? analysisFailed('Corpus study analysis failed');
@@ -174,8 +216,13 @@ function buildCorpusStudyUserPrompt(
   learnerProfile: LearnerProfile,
   hits: SearchRetrievalHitDto[],
   outlineEntries: DocumentOutlinePromptEntry[],
+  validationContext: ReturnType<typeof buildValidationContext>,
+  options?: {
+    refinementHint?: string;
+    previousFocusAreas?: StudyFocusArea[];
+  },
 ): string {
-  const documents = [...buildValidationContext(hits).documentsById.entries()].map(
+  const documents = [...validationContext.documentsById.entries()].map(
     ([id, doc]) => ({ id, title: doc.title }),
   );
 
@@ -195,11 +242,54 @@ function buildCorpusStudyUserPrompt(
     CORPUS_STUDY_USER_MARKER,
     `LEARNER_PROFILE=${JSON.stringify(learnerProfile)}`,
     `DOCUMENTS_JSON=${JSON.stringify(documents)}`,
+    `ALLOWED_CHUNK_ORDINALS_JSON=${buildAllowedChunkOrdinalsJson(validationContext)}`,
     ...(outlineEntries.length > 0
       ? [`DOCUMENT_OUTLINES_JSON=${JSON.stringify(outlineEntries)}`]
       : []),
+    ...buildCorpusStudyRefinementSection(options),
     'EXCERPTS:',
     excerpts,
+  ].join('\n');
+}
+
+function buildCorpusStudyRefinementSection(
+  options?: {
+    refinementHint?: string;
+    previousFocusAreas?: StudyFocusArea[];
+  },
+): string[] {
+  if (!options?.refinementHint && !options?.previousFocusAreas?.length) {
+    return [];
+  }
+
+  const lines = [
+    'FOCUS_REFINEMENT=true',
+    'Revise the recommended study focus areas according to the learner request. Use only allowed chunk ordinals from excerpts.',
+  ];
+  if (options.refinementHint) {
+    lines.push(`LEARNER_REFINEMENT_HINT=${options.refinementHint}`);
+  }
+  if (options.previousFocusAreas?.length) {
+    lines.push(
+      `PREVIOUS_FOCUS_AREAS_JSON=${JSON.stringify(options.previousFocusAreas)}`,
+    );
+  }
+  return lines;
+}
+
+function buildCorpusStudyRetryUserPrompt(
+  userPrompt: string,
+  previousError: string | null,
+): string {
+  if (!previousError) {
+    return userPrompt;
+  }
+
+  return [
+    userPrompt,
+    'VALIDATION_RETRY=true',
+    `PREVIOUS_ERROR=${previousError}`,
+    'Fix focusAreas ordinalStart and ordinalEnd to use only ordinals from ALLOWED_CHUNK_ORDINALS_JSON or EXCERPTS.',
   ].join('\n');
 }
 

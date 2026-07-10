@@ -68,7 +68,7 @@ export function formatRevisionCalendarSection(
 
   const lines = entries.map((entry) => formatRevisionCalendarLine(entry, lang));
 
-  return [title, '', ...lines].join('\n');
+  return [title, '', lines.join('\n\n')].join('\n');
 }
 
 function formatRevisionCalendarLine(

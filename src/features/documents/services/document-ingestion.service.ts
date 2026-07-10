@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   formatFirestoreIndexHint,
   isFirestoreMissingIndexError,
+  isFirestoreTransientError,
 } from '../../../core/firestore/firestore-index.util';
 import { EMBEDDING_PORT } from '../../../core/llm/embedding.tokens';
 import type { EmbeddingPort } from '../../../core/llm/embedding.port';
@@ -68,6 +69,10 @@ export class DocumentIngestionService implements OnModuleInit {
       if (isFirestoreMissingIndexError(error)) {
         this.logger.warn(
           `Skipping stale processing recovery (missing Firestore index). Create COLLECTION_GROUP index on documents.status: ${formatFirestoreIndexHint(error)}`,
+        );
+      } else if (isFirestoreTransientError(error)) {
+        this.logger.warn(
+          'Skipping stale processing recovery (Firestore unreachable). Ingestion will resume when Firestore is available.',
         );
       } else {
         throw error;

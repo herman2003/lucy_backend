@@ -49,4 +49,28 @@ describe('generated-corpus-study-plan.validator (LEARN-07a)', () => {
       ),
     ).toThrow(/unknown documentId/);
   });
+
+  it('clamps invalid ordinal ranges to known excerpts', () => {
+    const areas = parseGeneratedCorpusStudyPlan(
+      {
+        focusAreas: [
+          {
+            documentId: 'doc_1',
+            label: 'Chapitre 2',
+            ordinalStart: 5,
+            ordinalEnd: 8,
+            importance: 'medium',
+            rationale: 'Section avancée.',
+            keyConcepts: ['thermo'],
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(areas[0]).toMatchObject({
+      ordinalStart: 1,
+      ordinalEnd: 1,
+    });
+  });
 });

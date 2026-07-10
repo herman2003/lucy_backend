@@ -1,4 +1,5 @@
 import { learningGenerationFailed } from '../utils/learning-generation-failure.error';
+import { clampOrdinalRangeToKnown } from '../utils/corpus-study-ordinal.util';
 import type {
   StudyFocusArea,
   StudyFocusImportance,
@@ -55,11 +56,11 @@ function parseFocusArea(
     throw analysisFailed(`focusAreas[${index}] has no known chunks for document`);
   }
 
-  const ordinalStart = readNonNegativeInt(
+  let ordinalStart = readNonNegativeInt(
     item.ordinalStart,
     `focusAreas[${index}].ordinalStart`,
   );
-  const ordinalEnd = readNonNegativeInt(
+  let ordinalEnd = readNonNegativeInt(
     item.ordinalEnd,
     `focusAreas[${index}].ordinalEnd`,
   );
@@ -68,7 +69,11 @@ function parseFocusArea(
   }
 
   if (!rangeOverlapsKnownOrdinals(ordinalStart, ordinalEnd, ordinals)) {
-    throw analysisFailed(`focusAreas[${index}] ordinal range does not match excerpts`);
+    ({ ordinalStart, ordinalEnd } = clampOrdinalRangeToKnown(
+      ordinalStart,
+      ordinalEnd,
+      ordinals,
+    ));
   }
 
   const label = readNonEmptyString(item.label, `focusAreas[${index}].label`);

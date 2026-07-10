@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 
+import { withFirestoreRetry } from '../../../core/firestore/firestore-retry.util';
 import type { PersistedChatMessage, PersistedChatThread } from '../domain/chat.types';
 import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
 import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
@@ -31,6 +32,8 @@ type FirestoreChatMessageData = {
 
 @Injectable()
 export class FirestoreChatsRepository implements ChatsRepository {
+  private readonly logger = new Logger(FirestoreChatsRepository.name);
+
   async createThread(uid: string, title: string): Promise<PersistedChatThread> {
     const ref = this.chatsCollection(uid).doc();
     const now = new Date().toISOString();
@@ -39,7 +42,10 @@ export class FirestoreChatsRepository implements ChatsRepository {
       createdAt: now,
       updatedAt: now,
     };
-    await ref.set(data);
+    await withFirestoreRetry(() => ref.set(data), {
+      label: `createThread chatId=${ref.id}`,
+      logger: this.logger,
+    });
     return { id: ref.id, uid, ...data };
   }
 
@@ -131,7 +137,10 @@ export class FirestoreChatsRepository implements ChatsRepository {
       },
       { merge: true },
     );
-    await batch.commit();
+    await withFirestoreRetry(() => batch.commit(), {
+      label: `appendMessage chatId=${chatId}`,
+      logger: this.logger,
+    });
 
     return {
       chatId,
@@ -191,7 +200,10 @@ export class FirestoreChatsRepository implements ChatsRepository {
         updates.revisionExamDate = patch.revisionExamDate;
       }
     }
-    await threadRef.set(updates, { merge: true });
+    await withFirestoreRetry(() => threadRef.set(updates, { merge: true }), {
+      label: `patchThread chatId=${chatId}`,
+      logger: this.logger,
+    });
   }
 
   async deleteThread(uid: string, chatId: string): Promise<void> {
@@ -207,7 +219,10 @@ export class FirestoreChatsRepository implements ChatsRepository {
       batch.delete(doc.ref);
     }
     batch.delete(threadRef);
-    await batch.commit();
+    await withFirestoreRetry(() => batch.commit(), {
+      label: `deleteThread chatId=${chatId}`,
+      logger: this.logger,
+    });
   }
 
   private chatsCollection(uid: string): admin.firestore.CollectionReference {

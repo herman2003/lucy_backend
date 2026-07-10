@@ -18,5 +18,6 @@ export type PendingLearningGeneration = {
   documentId?: string;
   documentTitle?: string;
   selectedFocusAreaIds?: string[];
+  focusRefinementHint?: string;
   updatedAt: string;
 };

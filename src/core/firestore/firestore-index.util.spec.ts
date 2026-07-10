@@ -1,6 +1,7 @@
 import {
   formatFirestoreIndexHint,
   isFirestoreMissingIndexError,
+  isFirestoreTransientError,
 } from './firestore-index.util';
 
 describe('firestore-index.util', () => {
@@ -12,6 +13,17 @@ describe('firestore-index.util', () => {
       }),
     ).toBe(true);
     expect(isFirestoreMissingIndexError(new Error('other'))).toBe(false);
+  });
+
+  it('detects transient Firestore connectivity errors', () => {
+    expect(isFirestoreTransientError({ code: 14 })).toBe(true);
+    expect(
+      isFirestoreTransientError({
+        code: 14,
+        message: 'Name resolution failed for target dns:firestore.googleapis.com:443',
+      }),
+    ).toBe(true);
+    expect(isFirestoreTransientError({ code: 9 })).toBe(false);
   });
 
   it('extracts Firebase console URL from details', () => {

@@ -44,13 +44,43 @@ export function resolveLearningDocumentScope(
   return { kind: 'all' };
 }
 
+export type DocumentSelectionResult =
+  | { kind: 'resolved'; documentId: string; documentTitle: string }
+  | { kind: 'all' }
+  | { kind: 'invalid' };
+
+export function isAllDocumentsSelection(message: string): boolean {
+  const normalized = normalizeDocumentMatchText(message);
+  if (!normalized) {
+    return false;
+  }
+
+  const patterns = [
+    /^tous?\s+(les\s+)?documents?\b/,
+    /^toutes?\s+(les\s+)?documents?\b/,
+    /^tout\s+les\s+documents?\b/,
+    /^all\s+documents?\b/,
+    /^alle\s+dokumente\b/,
+    /^alle\b/,
+    /^everything\b/,
+    /^tout\b$/,
+    /^tous\b$/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+}
+
 export function parseDocumentSelection(
   message: string,
   documents: ActiveDocumentRef[],
-): { kind: 'resolved'; documentId: string; documentTitle: string } | { kind: 'invalid' } {
+): DocumentSelectionResult {
   const normalized = message.trim();
   if (!normalized || documents.length === 0) {
     return { kind: 'invalid' };
+  }
+
+  if (isAllDocumentsSelection(message)) {
+    return { kind: 'all' };
   }
 
   const numberMatch = normalized.match(/^(\d+)$/);

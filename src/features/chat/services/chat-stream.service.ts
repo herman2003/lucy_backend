@@ -4,6 +4,7 @@ import { LLM_STREAMING_PORT } from '../../../core/llm/llm-streaming.tokens';
 import type { LlmStreamingPort } from '../../../core/llm/llm-streaming.port';
 import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { LucyApiError } from '../../../core/errors/lucy-api.error';
+import { isFirestoreTransientError } from '../../../core/firestore/firestore-index.util';
 import type { LearnerProfile } from '../../onboarding/domain/learner-profile.enums';
 import type { PersistedLearningSession } from '../../learning-sessions/domain/learning-session.types';
 import { CorpusStudyAnalyzerService } from '../../learning-sessions/services/corpus-study-analyzer.service';
@@ -577,13 +578,17 @@ export class ChatStreamService {
 
     await this.chatsRepository.patchThread(uid, chatId, {
       pendingLearningGeneration: pending,
+      ...(pending.focusRefinementHint !== undefined ? { corpusStudyPlan: null } : {}),
     });
 
-    let corpusStudyPlan = getValidCorpusStudyPlan(
-      turn.thread.corpusStudyPlan,
-      Date.now(),
-      pending.documentId,
-    );
+    const isRefinement = pending.focusRefinementHint !== undefined;
+    let corpusStudyPlan = isRefinement
+      ? null
+      : getValidCorpusStudyPlan(
+          turn.thread.corpusStudyPlan,
+          Date.now(),
+          pending.documentId,
+        );
     let assistantText = analyzingText;
 
     if (!corpusStudyPlan) {
@@ -592,6 +597,12 @@ export class ChatStreamService {
           examType: pending.examType,
           ...(pending.documentId !== undefined
             ? { documentIds: [pending.documentId] }
+            : {}),
+          ...(pending.focusRefinementHint !== undefined
+            ? {
+                refinementHint: pending.focusRefinementHint,
+                previousFocusAreas: turn.thread.corpusStudyPlan?.focusAreas,
+              }
             : {}),
         });
         await this.chatsRepository.patchThread(uid, chatId, {
@@ -642,9 +653,19 @@ export class ChatStreamService {
 
     await this.chatsRepository.patchThread(uid, chatId, {
       pendingLearningGeneration: {
-        ...pending,
+        type: pending.type,
         step: 'awaiting_focus_selection',
         updatedAt: new Date().toISOString(),
+        ...(pending.itemCount !== undefined ? { itemCount: pending.itemCount } : {}),
+        ...(pending.topicHint !== undefined ? { topicHint: pending.topicHint } : {}),
+        ...(pending.examType !== undefined ? { examType: pending.examType } : {}),
+        ...(pending.documentId !== undefined ? { documentId: pending.documentId } : {}),
+        ...(pending.documentTitle !== undefined
+          ? { documentTitle: pending.documentTitle }
+          : {}),
+        ...(pending.selectedFocusAreaIds !== undefined
+          ? { selectedFocusAreaIds: pending.selectedFocusAreaIds }
+          : {}),
       },
     });
 
@@ -701,6 +722,13 @@ function newMessageId(): string {
 function toStreamError(error: unknown): LucyApiError {
   if (error instanceof LucyApiError) {
     return error;
+  }
+  if (isFirestoreTransientError(error)) {
+    return new LucyApiError(
+      503,
+      LucyErrorCodes.SERVICE_UNAVAILABLE,
+      'Firestore is temporarily unreachable',
+    );
   }
   return new LucyApiError(
     500,

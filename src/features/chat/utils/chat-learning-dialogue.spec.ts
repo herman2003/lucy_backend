@@ -169,6 +169,36 @@ describe('chat-learning-dialogue (LEARN-06)', () => {
     });
   });
 
+  it('starts analysis on all documents selection (LEARN-11f)', () => {
+    const activeDocuments = [
+      { id: 'doc_1', title: 'Sprint-3-Personalized-learning-documents' },
+      { id: 'doc_2', title: 'Bachelorarbeit_german' },
+      { id: 'doc_3', title: 'documentpresentation' },
+    ];
+
+    const outcome = processLearningDialogueTurn({
+      message: 'tout les documents stp',
+      pending: {
+        type: 'flashcards',
+        step: 'awaiting_document_selection',
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      activeDocuments,
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'needs_analysis',
+      pending: {
+        step: 'analyzing',
+      },
+    });
+    expect(
+      outcome && outcome.kind === 'needs_analysis' ? outcome.pending.documentId : 'set',
+    ).toBeUndefined();
+  });
+
   it('moves to count after focus selection', () => {
     const plan = {
       generatedAt: now,
@@ -206,6 +236,90 @@ describe('chat-learning-dialogue (LEARN-06)', () => {
         selectedFocusAreaIds: ['focus_1'],
       },
     });
+  });
+
+  it('re-runs analysis when the learner asks to refine focus areas', () => {
+    const plan = {
+      generatedAt: now,
+      expiresAt: '2026-06-11T12:00:00.000Z',
+      focusAreas: [
+        {
+          id: 'focus_1',
+          documentId: 'doc_1',
+          documentTitle: 'Thermo',
+          label: 'Entropie',
+          ordinalStart: 0,
+          ordinalEnd: 0,
+          importance: 'high' as const,
+          rationale: 'Base.',
+          keyConcepts: ['entropie'],
+        },
+      ],
+    };
+
+    const outcome = processLearningDialogueTurn({
+      message: 'plus sur la chimie organique',
+      pending: {
+        type: 'quiz',
+        step: 'awaiting_focus_selection',
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      corpusStudyPlan: plan,
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'needs_analysis',
+      pending: {
+        step: 'analyzing',
+        focusRefinementHint: 'plus sur la chimie organique',
+      },
+    });
+  });
+
+  it('re-runs analysis on other suggestions request', () => {
+    const plan = {
+      generatedAt: now,
+      expiresAt: '2026-06-11T12:00:00.000Z',
+      focusAreas: [
+        {
+          id: 'focus_1',
+          documentId: 'doc_1',
+          documentTitle: 'Thermo',
+          label: 'Entropie',
+          ordinalStart: 0,
+          ordinalEnd: 0,
+          importance: 'high' as const,
+          rationale: 'Base.',
+          keyConcepts: ['entropie'],
+        },
+      ],
+    };
+
+    const outcome = processLearningDialogueTurn({
+      message: 'autre proposition',
+      pending: {
+        type: 'flashcards',
+        step: 'awaiting_focus_selection',
+        updatedAt: now,
+      },
+      tutoringLanguage: 'fr',
+      corpusStudyPlan: plan,
+      nowIso: now,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'needs_analysis',
+      pending: {
+        step: 'analyzing',
+      },
+    });
+    expect(
+      outcome && outcome.kind === 'needs_analysis'
+        ? outcome.pending.focusRefinementHint
+        : undefined,
+    ).toContain('different study focus recommendations');
   });
 
   it('preserves selectedFocusAreaIds when moving to launch recap', () => {

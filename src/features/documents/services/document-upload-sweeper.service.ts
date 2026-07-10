@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import {
   formatFirestoreIndexHint,
   isFirestoreMissingIndexError,
+  isFirestoreTransientError,
 } from '../../../core/firestore/firestore-index.util';
 import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import {
@@ -53,6 +54,12 @@ export class DocumentUploadSweeperService implements OnModuleInit, OnModuleDestr
       if (isFirestoreMissingIndexError(error)) {
         this.logger.warn(
           `Upload sweeper skipped (missing Firestore index). Create COLLECTION_GROUP index on documents.status: ${formatFirestoreIndexHint(error)}`,
+        );
+        return 0;
+      }
+      if (isFirestoreTransientError(error)) {
+        this.logger.warn(
+          `Upload sweeper skipped (Firestore unreachable). Will retry on next interval.`,
         );
         return 0;
       }
