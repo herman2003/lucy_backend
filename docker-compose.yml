@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lucy-backend:latest
+    container_name: lucy-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    # All configuration comes from .env (copy .env.example first).
+    env_file:
+      - .env
+    # Optional: to use a Firebase service-account key file, drop it at
+    # ./serviceAccount.json, set GOOGLE_APPLICATION_CREDENTIALS=/app/serviceAccount.json
+    # in .env, then uncomment the volume below.
+    # volumes:
+    #   - ./serviceAccount.json:/app/serviceAccount.json:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
