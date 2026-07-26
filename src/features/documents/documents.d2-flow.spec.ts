@@ -118,7 +118,7 @@ describe('Documents D2 flow (ingestion E2E)', () => {
     expect(detail.status).toBe('ready');
     expect(detail.chunkCount).toBeGreaterThanOrEqual(1);
 
-    const chunks = chunksRepository.listChunks(uid, created.id);
+    const chunks = await chunksRepository.listChunks(uid, created.id);
     expect(chunks.length).toBe(detail.chunkCount);
     expect(chunks[0]?.text).toContain('Premier paragraphe');
   });

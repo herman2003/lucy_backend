@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { LearnerProfile } from '../../features/onboarding/domain/learner-profile.enums';
+import { buildDifficultyGuidance } from './learner-generation-prompt.util';
+import { buildExamTypePromptContext } from '../../features/learning-sessions/utils/learning-exam-type.util';
 
 export type ValidateAnswerUserPromptVars = {
   locale: string;
@@ -23,6 +25,9 @@ export class PromptLoaderService implements OnModuleInit {
   private analyzeSystem = '';
   private analyzeUserTemplate = '';
   private chatTutorSystemTemplate = '';
+  private quizGeneratorSystemTemplate = '';
+  private flashcardsGeneratorSystemTemplate = '';
+  private corpusStudyAnalyzerSystemTemplate = '';
 
   onModuleInit(): void {
     const promptsRoot = this.resolvePromptsRoot();
@@ -46,6 +51,54 @@ export class PromptLoaderService implements OnModuleInit {
       join(promptsRoot, 'chat-tutor.system.hbs'),
       'utf8',
     );
+    this.quizGeneratorSystemTemplate = readFileSync(
+      join(promptsRoot, 'quiz-generator.system.hbs'),
+      'utf8',
+    );
+    this.flashcardsGeneratorSystemTemplate = readFileSync(
+      join(promptsRoot, 'flashcards-generator.system.hbs'),
+      'utf8',
+    );
+    this.corpusStudyAnalyzerSystemTemplate = readFileSync(
+      join(promptsRoot, 'corpus-study-analyzer.system.hbs'),
+      'utf8',
+    );
+  }
+
+  getQuizGeneratorSystemPrompt(
+    learnerProfile: LearnerProfile,
+    itemCount: number,
+    examType?: string,
+  ): string {
+    return renderHandlebarsTemplate(
+      this.quizGeneratorSystemTemplate,
+      buildLearningGeneratorTemplateVars(learnerProfile, itemCount, examType),
+    );
+  }
+
+  getFlashcardsGeneratorSystemPrompt(
+    learnerProfile: LearnerProfile,
+    itemCount: number,
+    examType?: string,
+  ): string {
+    return renderHandlebarsTemplate(
+      this.flashcardsGeneratorSystemTemplate,
+      buildLearningGeneratorTemplateVars(learnerProfile, itemCount, examType),
+    );
+  }
+
+  getCorpusStudyAnalyzerSystemPrompt(
+    learnerProfile: LearnerProfile,
+    examType?: string,
+  ): string {
+    return renderHandlebarsTemplate(this.corpusStudyAnalyzerSystemTemplate, {
+      tutoring_language: learnerProfile.tutoring_language,
+      explanation_style: learnerProfile.explanation_style,
+      feedback_tone: learnerProfile.feedback_tone,
+      learning_goal: learnerProfile.learning_goal,
+      self_assessed_level: learnerProfile.self_assessed_level,
+      exam_type_context: buildExamTypePromptContext(examType),
+    });
   }
 
   getChatTutorSystemPrompt(learnerProfile: LearnerProfile): string {
@@ -100,4 +153,23 @@ export function renderHandlebarsTemplate(
   vars: Record<string, string>,
 ): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? '');
+}
+
+function buildLearningGeneratorTemplateVars(
+  learnerProfile: LearnerProfile,
+  itemCount: number,
+  examType?: string,
+): Record<string, string> {
+  return {
+    itemCount: String(itemCount),
+    primary_role: learnerProfile.primary_role,
+    main_domains: learnerProfile.main_domains.join(', '),
+    learning_goal: learnerProfile.learning_goal,
+    self_assessed_level: learnerProfile.self_assessed_level,
+    tutoring_language: learnerProfile.tutoring_language,
+    explanation_style: learnerProfile.explanation_style,
+    feedback_tone: learnerProfile.feedback_tone,
+    difficulty_guidance: buildDifficultyGuidance(learnerProfile.self_assessed_level),
+    exam_type_context: buildExamTypePromptContext(examType),
+  };
 }

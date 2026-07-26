@@ -6,6 +6,7 @@ export type DevStackStatus = {
   firestoreProvider: string;
   storageProvider: string;
   geminiConfigured: boolean;
+  openRouterConfigured: boolean;
   localStackReady: boolean;
 };
 
@@ -25,6 +26,7 @@ export function describeDevStack(config: LucyConfig): DevStackStatus {
     firestoreProvider: config.firestoreProvider,
     storageProvider: config.storageProvider,
     geminiConfigured: config.geminiApiKey.trim().length > 0,
+    openRouterConfigured: config.openRouterApiKey.trim().length > 0,
     localStackReady: isLocalDevStackReady(config),
   };
 }

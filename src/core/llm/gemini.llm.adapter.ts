@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 
 import { LUCY_CONFIG } from '../config/app-config.module';
 import type { LucyConfig } from '../config/lucy-config';
@@ -10,9 +10,11 @@ import type {
   LlmStructuredRequest,
   LlmStructuredResponse,
 } from './llm.port';
+import { toGeminiResponseSchema } from './gemini-json-schema';
 
 @Injectable()
 export class GeminiLlmAdapter implements LlmPort {
+  private readonly logger = new Logger(GeminiLlmAdapter.name);
   private readonly apiKey: string;
   private readonly modelName: string;
 
@@ -38,6 +40,7 @@ export class GeminiLlmAdapter implements LlmPort {
       systemInstruction: input.systemPrompt,
       generationConfig: {
         responseMimeType: 'application/json',
+        responseSchema: toGeminiResponseSchema(input.responseJsonSchema),
       },
     });
 
@@ -45,7 +48,11 @@ export class GeminiLlmAdapter implements LlmPort {
     try {
       const result = await model.generateContent(input.userPrompt);
       rawText = result.response.text();
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `generateStructured failed model=${this.modelName}: ${detail}`,
+      );
       throw new LucyApiError(
         503,
         LucyErrorCodes.LLM_UNAVAILABLE,

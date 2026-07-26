@@ -17,8 +17,8 @@ async function bootstrap() {
   app.setGlobalPrefix('v1', { exclude: ['health'] });
   app.useGlobalFilters(new LucyExceptionFilter());
   const port = config.port;
-  await app.listen(port);
-  Logger.log(`Lucy API listening on http://localhost:${port}`, 'Bootstrap');
+  await app.listen(port, '0.0.0.0');
+  Logger.log(`Lucy API listening on http://0.0.0.0:${port}`, 'Bootstrap');
 
   if (isLocalDevStackReady(config)) {
     Logger.log(

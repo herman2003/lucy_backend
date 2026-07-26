@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   formatFirestoreIndexHint,
   isFirestoreMissingIndexError,
+  isFirestoreTransientError,
 } from '../../../core/firestore/firestore-index.util';
 import { EMBEDDING_PORT } from '../../../core/llm/embedding.tokens';
 import type { EmbeddingPort } from '../../../core/llm/embedding.port';
@@ -21,6 +22,7 @@ import {
   DOCUMENTS_STORAGE,
   type DocumentsStorage,
 } from '../storage/documents-storage.port';
+import { buildDocumentOutline } from '../utils/document-outline.builder';
 import {
   INGESTION_EMBED_BATCH_SIZE,
   INGESTION_MAX_ATTEMPTS,
@@ -67,6 +69,10 @@ export class DocumentIngestionService implements OnModuleInit {
       if (isFirestoreMissingIndexError(error)) {
         this.logger.warn(
           `Skipping stale processing recovery (missing Firestore index). Create COLLECTION_GROUP index on documents.status: ${formatFirestoreIndexHint(error)}`,
+        );
+      } else if (isFirestoreTransientError(error)) {
+        this.logger.warn(
+          'Skipping stale processing recovery (Firestore unreachable). Ingestion will resume when Firestore is available.',
         );
       } else {
         throw error;
@@ -254,9 +260,11 @@ export class DocumentIngestionService implements OnModuleInit {
     }));
 
     await this.chunksRepository.replaceChunks(uid, documentId, persisted);
+    const outline = buildDocumentOutline(extracted.text, chunks);
     await this.documentsRepository.markIngestionSuccess(uid, documentId, {
       chunkCount: persisted.length,
       ...(extracted.pageCount !== undefined ? { pageCount: extracted.pageCount } : {}),
+      ...(outline.length > 0 ? { outline } : {}),
     });
     this.logger.log(
       `ingest ready uid=${uid} docId=${documentId} chunks=${persisted.length}${extracted.pageCount !== undefined ? ` pages=${extracted.pageCount}` : ''}`,

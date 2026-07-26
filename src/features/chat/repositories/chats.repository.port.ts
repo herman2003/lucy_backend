@@ -1,7 +1,10 @@
+import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import type {
   PersistedChatMessage,
   PersistedChatThread,
 } from '../domain/chat.types';
+import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
+import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
 
 export const CHATS_REPOSITORY = Symbol('CHATS_REPOSITORY');
 
@@ -32,7 +35,13 @@ export interface ChatsRepository {
   patchThread(
     uid: string,
     chatId: string,
-    patch: { title?: string },
+    patch: {
+      title?: string;
+      pendingLearningGeneration?: PendingLearningGeneration | null;
+      corpusStudyPlan?: CorpusStudyPlan | null;
+      lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
+      revisionExamDate?: string | null;
+    },
   ): Promise<void>;
 
   deleteThread(uid: string, chatId: string): Promise<void>;

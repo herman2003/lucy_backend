@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 
 import { DOCUMENTS_STORAGE, type DocumentsStorage } from '../storage/documents-storage.port';
 import { buildDocumentStoragePath } from '../utils/document-file.util';
+import type { DocumentOutlineEntry } from '../domain/document-outline.types';
 import {
   DOCUMENT_CHUNKS_REPOSITORY,
   type DocumentChunksRepository,
@@ -24,6 +25,7 @@ type FirestoreDocumentData = {
   errorCode?: string;
   chunkCount?: number;
   pageCount?: number;
+  outline?: DocumentOutlineEntry[];
   ingestionAttempts?: number;
   createdAt: string;
   updatedAt: string;
@@ -201,13 +203,14 @@ export class FirestoreDocumentsRepository implements DocumentsRepository {
   async markIngestionSuccess(
     uid: string,
     id: string,
-    input: { chunkCount: number; pageCount?: number },
+    input: { chunkCount: number; pageCount?: number; outline?: DocumentOutlineEntry[] },
   ): Promise<void> {
     await this.documentsCollection(uid).doc(id).set(
       {
         status: 'ready',
         chunkCount: input.chunkCount,
         ...(input.pageCount !== undefined ? { pageCount: input.pageCount } : {}),
+        ...(input.outline !== undefined ? { outline: input.outline } : {}),
         errorCode: admin.firestore.FieldValue.delete(),
         updatedAt: new Date().toISOString(),
       },
@@ -268,6 +271,7 @@ export class FirestoreDocumentsRepository implements DocumentsRepository {
       ...(data.errorCode ? { errorCode: data.errorCode } : {}),
       ...(data.chunkCount !== undefined ? { chunkCount: data.chunkCount } : {}),
       ...(data.pageCount !== undefined ? { pageCount: data.pageCount } : {}),
+      ...(data.outline !== undefined ? { outline: data.outline } : {}),
       ...(data.ingestionAttempts !== undefined
         ? { ingestionAttempts: data.ingestionAttempts }
         : {}),

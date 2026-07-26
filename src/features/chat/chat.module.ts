@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 
 import { LUCY_CONFIG } from '../../core/config/app-config.module';
 import type { LucyConfig } from '../../core/config/lucy-config';
 import { LlmModule } from '../../core/llm/llm.module';
 import { PromptModule } from '../../core/prompt/prompt.module';
 import { DocumentsModule } from '../documents/documents.module';
+import { LearningSessionsModule } from '../learning-sessions/learning-sessions.module';
 import { RetrievalModule } from '../retrieval/retrieval.module';
 import { UsersModule } from '../users/users.module';
 import { ChatController } from './chat.controller';
@@ -18,7 +19,14 @@ import { ChatService } from './services/chat.service';
 import { ChatStreamService } from './services/chat-stream.service';
 
 @Module({
-  imports: [DocumentsModule, UsersModule, LlmModule, PromptModule, RetrievalModule],
+  imports: [
+    DocumentsModule,
+    UsersModule,
+    LlmModule,
+    PromptModule,
+    RetrievalModule,
+    forwardRef(() => LearningSessionsModule),
+  ],
   controllers: [ChatController],
   providers: [
     ChatService,

@@ -1,3 +1,7 @@
+import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
+import type { LastLearningGenerationRequest } from './last-learning-generation-request.types';
+import type { PendingLearningGeneration } from './pending-learning-generation.types';
+
 export type ChatMessageRole = 'user' | 'assistant';
 
 export type ChatMessageStatus = 'completed' | 'failed';
@@ -19,6 +23,11 @@ export type PersistedChatThread = {
   createdAt: string;
   updatedAt: string;
   lastMessagePreview?: string;
+  pendingLearningGeneration?: PendingLearningGeneration;
+  corpusStudyPlan?: CorpusStudyPlan;
+  lastLearningGenerationRequest?: LastLearningGenerationRequest;
+  /** ISO date (UTC midnight) for J-N revision push reminders (LEARN-12a-V2). */
+  revisionExamDate?: string;
 };
 
 export type PersistedChatMessage = {

@@ -1,7 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 
+import { withFirestoreRetry } from '../../../core/firestore/firestore-retry.util';
 import type { PersistedChatMessage, PersistedChatThread } from '../domain/chat.types';
+import type { LastLearningGenerationRequest } from '../domain/last-learning-generation-request.types';
+import type { PendingLearningGeneration } from '../domain/pending-learning-generation.types';
+import type { CorpusStudyPlan } from '../../learning-sessions/domain/study-focus-area.types';
 import type {
   ChatsRepository,
   ListChatMessagesOptions,
@@ -12,6 +16,10 @@ type FirestoreChatThreadData = {
   createdAt: string;
   updatedAt: string;
   lastMessagePreview?: string;
+  pendingLearningGeneration?: PendingLearningGeneration;
+  corpusStudyPlan?: CorpusStudyPlan;
+  lastLearningGenerationRequest?: LastLearningGenerationRequest;
+  revisionExamDate?: string;
 };
 
 type FirestoreChatMessageData = {
@@ -24,6 +32,8 @@ type FirestoreChatMessageData = {
 
 @Injectable()
 export class FirestoreChatsRepository implements ChatsRepository {
+  private readonly logger = new Logger(FirestoreChatsRepository.name);
+
   async createThread(uid: string, title: string): Promise<PersistedChatThread> {
     const ref = this.chatsCollection(uid).doc();
     const now = new Date().toISOString();
@@ -32,7 +42,10 @@ export class FirestoreChatsRepository implements ChatsRepository {
       createdAt: now,
       updatedAt: now,
     };
-    await ref.set(data);
+    await withFirestoreRetry(() => ref.set(data), {
+      label: `createThread chatId=${ref.id}`,
+      logger: this.logger,
+    });
     return { id: ref.id, uid, ...data };
   }
 
@@ -124,7 +137,10 @@ export class FirestoreChatsRepository implements ChatsRepository {
       },
       { merge: true },
     );
-    await batch.commit();
+    await withFirestoreRetry(() => batch.commit(), {
+      label: `appendMessage chatId=${chatId}`,
+      logger: this.logger,
+    });
 
     return {
       chatId,
@@ -136,7 +152,13 @@ export class FirestoreChatsRepository implements ChatsRepository {
   async patchThread(
     uid: string,
     chatId: string,
-    patch: { title?: string },
+    patch: {
+      title?: string;
+      pendingLearningGeneration?: PendingLearningGeneration | null;
+      corpusStudyPlan?: CorpusStudyPlan | null;
+      lastLearningGenerationRequest?: LastLearningGenerationRequest | null;
+      revisionExamDate?: string | null;
+    },
   ): Promise<void> {
     const threadRef = this.chatsCollection(uid).doc(chatId);
     const threadSnap = await threadRef.get();
@@ -144,13 +166,44 @@ export class FirestoreChatsRepository implements ChatsRepository {
       throw new Error(`Chat thread not found: ${chatId}`);
     }
 
-    const updates: Partial<FirestoreChatThreadData> = {
+    const updates: Record<string, unknown> = {
       updatedAt: new Date().toISOString(),
     };
     if (patch.title !== undefined) {
       updates.title = patch.title;
     }
-    await threadRef.set(updates, { merge: true });
+    if (patch.pendingLearningGeneration !== undefined) {
+      if (patch.pendingLearningGeneration === null) {
+        updates.pendingLearningGeneration = admin.firestore.FieldValue.delete();
+      } else {
+        updates.pendingLearningGeneration = patch.pendingLearningGeneration;
+      }
+    }
+    if (patch.corpusStudyPlan !== undefined) {
+      if (patch.corpusStudyPlan === null) {
+        updates.corpusStudyPlan = admin.firestore.FieldValue.delete();
+      } else {
+        updates.corpusStudyPlan = patch.corpusStudyPlan;
+      }
+    }
+    if (patch.lastLearningGenerationRequest !== undefined) {
+      if (patch.lastLearningGenerationRequest === null) {
+        updates.lastLearningGenerationRequest = admin.firestore.FieldValue.delete();
+      } else {
+        updates.lastLearningGenerationRequest = patch.lastLearningGenerationRequest;
+      }
+    }
+    if (patch.revisionExamDate !== undefined) {
+      if (patch.revisionExamDate === null) {
+        updates.revisionExamDate = admin.firestore.FieldValue.delete();
+      } else {
+        updates.revisionExamDate = patch.revisionExamDate;
+      }
+    }
+    await withFirestoreRetry(() => threadRef.set(updates, { merge: true }), {
+      label: `patchThread chatId=${chatId}`,
+      logger: this.logger,
+    });
   }
 
   async deleteThread(uid: string, chatId: string): Promise<void> {
@@ -166,7 +219,10 @@ export class FirestoreChatsRepository implements ChatsRepository {
       batch.delete(doc.ref);
     }
     batch.delete(threadRef);
-    await batch.commit();
+    await withFirestoreRetry(() => batch.commit(), {
+      label: `deleteThread chatId=${chatId}`,
+      logger: this.logger,
+    });
   }
 
   private chatsCollection(uid: string): admin.firestore.CollectionReference {
@@ -186,6 +242,18 @@ export class FirestoreChatsRepository implements ChatsRepository {
       updatedAt: data.updatedAt,
       ...(data.lastMessagePreview !== undefined
         ? { lastMessagePreview: data.lastMessagePreview }
+        : {}),
+      ...(data.pendingLearningGeneration !== undefined
+        ? { pendingLearningGeneration: data.pendingLearningGeneration }
+        : {}),
+      ...(data.corpusStudyPlan !== undefined
+        ? { corpusStudyPlan: data.corpusStudyPlan }
+        : {}),
+      ...(data.lastLearningGenerationRequest !== undefined
+        ? { lastLearningGenerationRequest: data.lastLearningGenerationRequest }
+        : {}),
+      ...(data.revisionExamDate !== undefined
+        ? { revisionExamDate: data.revisionExamDate }
         : {}),
     };
   }

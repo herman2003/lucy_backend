@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { AppConfigModule, LUCY_CONFIG } from '../../../core/config/app-config.module';
 import { loadLucyConfig } from '../../../core/config/lucy-config';
+import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
+import { LucyApiError } from '../../../core/errors/lucy-api.error';
 import { EMBEDDING_PORT } from '../../../core/llm/embedding.tokens';
 import { FakeEmbeddingAdapter } from '../../../core/llm/fake.embedding.adapter';
 import { LlmModule } from '../../../core/llm/llm.module';
@@ -10,7 +12,6 @@ import { buildOffCorpusAssistantReply } from '../utils/chat-off-corpus-reply';
 import { PromptLoaderService } from '../../../core/prompt/prompt-loader.service';
 import { PromptModule } from '../../../core/prompt/prompt.module';
 import { InMemoryUsersStore } from '../../../core/persistence/in-memory-users.store';
-import { LucyErrorCodes } from '../../../core/errors/lucy-error-codes';
 import { InMemoryDocumentChunksRepository } from '../../documents/repositories/in-memory-document-chunks.repository';
 import { InMemoryDocumentsRepository } from '../../documents/repositories/in-memory-documents.repository';
 import { DOCUMENT_CHUNKS_REPOSITORY } from '../../documents/repositories/document-chunks.repository.port';
@@ -21,6 +22,10 @@ import { InMemoryOnboardingUsersRepository } from '../../onboarding/repositories
 import { InMemoryUsersProfileRepository } from '../../users/repositories/in-memory-users-profile.repository';
 import { USERS_PROFILE_REPOSITORY } from '../../users/repositories/users.repository.port';
 import { RetrievalService } from '../../retrieval/services/retrieval.service';
+import { CorpusStudyAnalyzerService } from '../../learning-sessions/services/corpus-study-analyzer.service';
+import { LearningSessionsService } from '../../learning-sessions/services/learning-sessions.service';
+import { InMemoryLearningSessionsRepository } from '../../learning-sessions/repositories/in-memory-learning-sessions.repository';
+import { LEARNING_SESSIONS_REPOSITORY } from '../../learning-sessions/repositories/learning-sessions.repository.port';
 import { DEFAULT_CHAT_TITLE } from '../dto/create-chat.dto';
 import type { ChatSseEvent } from '../domain/chat-sse.types';
 import { InMemoryChatsRepository } from '../repositories/in-memory-chats.repository';
@@ -51,10 +56,17 @@ async function collectSseEvents(
   return events;
 }
 
+function waitForNextEventLoopTick(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
 describe('ChatStreamService (CHAT-05)', () => {
   let streamService: ChatStreamService;
   let activeStreams: ChatActiveStreamRegistry;
   let chatsRepository: InMemoryChatsRepository;
+  let learningSessionsService: LearningSessionsService;
   let documentsRepo: InMemoryDocumentsRepository;
   let chunksRepo: InMemoryDocumentChunksRepository;
   let onboardingRepo: InMemoryOnboardingUsersRepository;
@@ -73,6 +85,13 @@ describe('ChatStreamService (CHAT-05)', () => {
         ChatActiveStreamRegistry,
         ChatPrerequisitesService,
         RetrievalService,
+        CorpusStudyAnalyzerService,
+        LearningSessionsService,
+        InMemoryLearningSessionsRepository,
+        {
+          provide: LEARNING_SESSIONS_REPOSITORY,
+          useExisting: InMemoryLearningSessionsRepository,
+        },
         InMemoryChatsRepository,
         { provide: CHATS_REPOSITORY, useExisting: InMemoryChatsRepository },
         { provide: USERS_PROFILE_REPOSITORY, useValue: new InMemoryUsersProfileRepository(usersStore) },
@@ -102,6 +121,7 @@ describe('ChatStreamService (CHAT-05)', () => {
     streamService = moduleRef.get(ChatStreamService);
     activeStreams = moduleRef.get(ChatActiveStreamRegistry);
     chatsRepository = moduleRef.get(InMemoryChatsRepository);
+    learningSessionsService = moduleRef.get(LearningSessionsService);
     documentsRepo = moduleRef.get(InMemoryDocumentsRepository);
     chunksRepo = moduleRef.get(InMemoryDocumentChunksRepository);
     moduleRef.get(PromptLoaderService).onModuleInit();
@@ -233,5 +253,432 @@ describe('ChatStreamService (CHAT-05)', () => {
     expect(doneEvent?.data.assistantMessage.content).toContain(
       'ne figure pas dans vos documents',
     );
+  });
+});
+
+describe('ChatStreamService learning generation (LEARN-01d)', () => {
+  let streamService: ChatStreamService;
+  let chatsRepository: InMemoryChatsRepository;
+  let learningSessionsService: LearningSessionsService;
+  let corpusStudyAnalyzer: CorpusStudyAnalyzerService;
+  let documentsRepo: InMemoryDocumentsRepository;
+  let chunksRepo: InMemoryDocumentChunksRepository;
+  let onboardingRepo: InMemoryOnboardingUsersRepository;
+  const uid = 'dev-user-chat-learning';
+
+  beforeEach(async () => {
+    const usersStore = new InMemoryUsersStore();
+    onboardingRepo = new InMemoryOnboardingUsersRepository(usersStore);
+
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      imports: [AppConfigModule, LlmModule, PromptModule],
+      providers: [
+        ChatStreamService,
+        ChatService,
+        ChatRagService,
+        ChatActiveStreamRegistry,
+        ChatPrerequisitesService,
+        RetrievalService,
+        CorpusStudyAnalyzerService,
+        LearningSessionsService,
+        InMemoryLearningSessionsRepository,
+        {
+          provide: LEARNING_SESSIONS_REPOSITORY,
+          useExisting: InMemoryLearningSessionsRepository,
+        },
+        InMemoryChatsRepository,
+        { provide: CHATS_REPOSITORY, useExisting: InMemoryChatsRepository },
+        {
+          provide: USERS_PROFILE_REPOSITORY,
+          useValue: new InMemoryUsersProfileRepository(usersStore),
+        },
+        InMemoryDocumentsStorage,
+        InMemoryDocumentsRepository,
+        InMemoryDocumentChunksRepository,
+        { provide: DOCUMENTS_STORAGE, useExisting: InMemoryDocumentsStorage },
+        { provide: DOCUMENTS_REPOSITORY, useExisting: InMemoryDocumentsRepository },
+        {
+          provide: DOCUMENT_CHUNKS_REPOSITORY,
+          useExisting: InMemoryDocumentChunksRepository,
+        },
+        { provide: EMBEDDING_PORT, useClass: FakeEmbeddingAdapter },
+      ],
+    })
+      .overrideProvider(LUCY_CONFIG)
+      .useValue(
+        loadLucyConfig({
+          NODE_ENV: 'test',
+          FIREBASE_AUTH_MODE: 'dev',
+          LLM_PROVIDER: 'mock',
+          FIRESTORE_PROVIDER: 'memory',
+        }),
+      )
+      .compile();
+
+    streamService = moduleRef.get(ChatStreamService);
+    chatsRepository = moduleRef.get(InMemoryChatsRepository);
+    learningSessionsService = moduleRef.get(LearningSessionsService);
+    corpusStudyAnalyzer = moduleRef.get(CorpusStudyAnalyzerService);
+    documentsRepo = moduleRef.get(InMemoryDocumentsRepository);
+    chunksRepo = moduleRef.get(InMemoryDocumentChunksRepository);
+    moduleRef.get(PromptLoaderService).onModuleInit();
+  });
+
+  async function finalizeUserWithProfile(): Promise<void> {
+    await onboardingRepo.saveAnalyzeSuccess(uid, validProfile, 'Résumé.');
+    await onboardingRepo.finalizeOnboarding(uid);
+  }
+
+  async function seedReadyActiveDocumentWithChunk(): Promise<void> {
+    const doc = await documentsRepo.create(uid, {
+      title: 'Thermo',
+      fileName: 't.txt',
+      mimeType: 'text/plain',
+      byteSize: 10,
+    });
+    await documentsRepo.updateStatus(uid, doc.id, 'ready');
+    await documentsRepo.setSearchEnabled(uid, doc.id, true);
+    await chunksRepo.replaceChunks(uid, doc.id, [
+      {
+        id: 'chunk_0',
+        ordinal: 0,
+        text: 'La entropie augmente dans un système isolé.',
+        tokenEstimate: 12,
+        pageStart: 1,
+        pageEnd: 1,
+        embedding: Array.from({ length: 768 }, () => 0.01),
+      },
+    ]);
+  }
+
+  it('runs corpus analysis after quiz confirmation (LEARN-07b)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const analyzeSpy = jest.spyOn(corpusStudyAnalyzer, 'analyze');
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'oui'),
+    );
+
+    expect(analyzeSpy).toHaveBeenCalledTimes(1);
+
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain(
+      'Je parcours tes documents',
+    );
+    expect(doneEvent?.data.assistantMessage.content).toContain('1. **');
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.pendingLearningGeneration).toMatchObject({
+      type: 'quiz',
+      step: 'awaiting_focus_selection',
+    });
+    expect(updatedThread?.corpusStudyPlan?.focusAreas.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('streams analyzing text before corpus analysis finishes (LEARN-06e)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+
+    let releaseAnalyze: (() => void) | undefined;
+    const analyzeGate = new Promise<void>((resolve) => {
+      releaseAnalyze = resolve;
+    });
+    jest.spyOn(corpusStudyAnalyzer, 'analyze').mockImplementation(async () => {
+      await analyzeGate;
+      return {
+        generatedAt: '2026-06-10T12:00:00.000Z',
+        expiresAt: '2026-06-11T12:00:00.000Z',
+        focusAreas: [
+          {
+            id: 'focus_1',
+            documentId: 'doc_mock',
+            documentTitle: 'Thermo',
+            label: 'Partie essentielle',
+            ordinalStart: 0,
+            ordinalEnd: 0,
+            importance: 'high' as const,
+            rationale: 'Base du cours.',
+            keyConcepts: ['entropie'],
+          },
+        ],
+      };
+    });
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+
+    const events: ChatSseEvent[] = [];
+    let sawAnalyzingDeltaBeforeDone = false;
+    const stream = streamService.streamMessage(uid, thread.id, 'oui');
+    const collector = (async () => {
+      for await (const event of stream) {
+        events.push(event);
+        if (
+          event.event === 'text_delta' &&
+          event.data.delta.includes('Je parcours tes documents')
+        ) {
+          sawAnalyzingDeltaBeforeDone = true;
+        }
+      }
+    })();
+
+    await waitForNextEventLoopTick();
+    await waitForNextEventLoopTick();
+    expect(sawAnalyzingDeltaBeforeDone).toBe(true);
+    expect(events.some((event) => event.event === 'done')).toBe(false);
+
+    releaseAnalyze?.();
+    await collector;
+    expect(events.some((event) => event.event === 'done')).toBe(true);
+  });
+
+  it('reuses cached corpusStudyPlan within TTL (LEARN-07b)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const analyzeSpy = jest.spyOn(corpusStudyAnalyzer, 'analyze');
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'annule'));
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+
+    expect(analyzeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for confirmation before generating a quiz', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const generateSpy = jest.spyOn(learningSessionsService, 'generate');
+
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+
+    expect(generateSpy).not.toHaveBeenCalled();
+
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain('quiz');
+    expect(doneEvent?.data.assistantMessage.content).toContain('c’est bien ça');
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.pendingLearningGeneration).toMatchObject({
+      type: 'quiz',
+      step: 'awaiting_confirm',
+    });
+  });
+
+  it('creates a quiz session after multi-turn dialogue', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const generateSpy = jest.spyOn(learningSessionsService, 'generate');
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '1'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '5'));
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'oui'),
+    );
+
+    expect(generateSpy).toHaveBeenCalledWith(uid, {
+      type: 'quiz',
+      itemCount: 5,
+      sourceChatId: thread.id,
+      focusAreas: expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.any(String),
+          documentId: expect.any(String),
+        }),
+      ]),
+    });
+
+    const createdEvent = events.find(
+      (event) => event.event === 'learning_session_created',
+    );
+    expect(createdEvent?.data).toMatchObject({
+      type: 'quiz',
+      title: expect.stringContaining('Quiz ·'),
+    });
+
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain('Ton quiz est prêt');
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.pendingLearningGeneration).toBeUndefined();
+  });
+
+  it('returns an actionable assistant message when generation fails (LEARN-09b)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    jest.spyOn(learningSessionsService, 'generate').mockRejectedValue(
+      new LucyApiError(
+        502,
+        LucyErrorCodes.LEARNING_GENERATION_FAILED,
+        'No retrieval hits available for learning session generation',
+        { adviceKey: 'no_retrieval_hits' },
+      ),
+    );
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '1'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '5'));
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'oui'),
+    );
+
+    expect(events.some((event) => event.event === 'error')).toBe(false);
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain(
+      'pas trouvé assez de contenu',
+    );
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.pendingLearningGeneration).toBeUndefined();
+  });
+
+  it('regenerates a quiz with the same parameters after refais pareil (LEARN-09c)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const generateSpy = jest.spyOn(learningSessionsService, 'generate');
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un quiz'),
+    );
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '1'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, '5'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+
+    const firstCall = generateSpy.mock.calls[0];
+    expect(firstCall).toBeDefined();
+
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'refais pareil'),
+    );
+
+    expect(generateSpy).toHaveBeenCalledTimes(2);
+    expect(generateSpy.mock.calls[1]).toEqual(firstCall);
+
+    expect(
+      events.some(
+        (event) =>
+          event.event === 'text_delta' &&
+          event.data.delta.includes('relance le même quiz'),
+      ),
+    ).toBe(true);
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain('Ton quiz est prêt');
+    expect(events.some((event) => event.event === 'learning_session_created')).toBe(true);
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.lastLearningGenerationRequest).toMatchObject({
+      type: 'quiz',
+      itemCount: 5,
+      selectedFocusAreaIds: expect.arrayContaining([expect.any(String)]),
+    });
+  });
+
+  it('returns an exportable revision plan in chat (LEARN-10c)', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const analyzeSpy = jest.spyOn(corpusStudyAnalyzer, 'analyze');
+    const generateSpy = jest.spyOn(learningSessionsService, 'generate');
+
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi un plan de révision'),
+    );
+
+    expect(analyzeSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy).not.toHaveBeenCalled();
+
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain(
+      'Je parcours tes documents',
+    );
+    expect(doneEvent?.data.assistantMessage.content).toContain('## Plan de révision');
+    expect(doneEvent?.data.assistantMessage.content).toContain('1. **');
+
+    const updatedThread = await chatsRepository.getThread(uid, thread.id);
+    expect(updatedThread?.pendingLearningGeneration).toBeUndefined();
+    expect(updatedThread?.corpusStudyPlan?.focusAreas.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('creates flashcards session from chat and emits learning_session_created SSE', async () => {
+    await finalizeUserWithProfile();
+    await seedReadyActiveDocumentWithChunk();
+    const thread = await chatsRepository.createThread(uid, DEFAULT_CHAT_TITLE);
+    const generateSpy = jest.spyOn(learningSessionsService, 'generate');
+
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'fais-moi des cartes mémoire'),
+    );
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'oui'));
+    await collectSseEvents(streamService.streamMessage(uid, thread.id, 'tout'));
+    await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'comme tu veux'),
+    );
+    const events = await collectSseEvents(
+      streamService.streamMessage(uid, thread.id, 'oui'),
+    );
+
+    expect(generateSpy).toHaveBeenCalledWith(uid, {
+      type: 'flashcards',
+      itemCount: 10,
+      sourceChatId: thread.id,
+      focusAreas: expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.any(String),
+          documentId: expect.any(String),
+        }),
+      ]),
+    });
+
+    const createdEvent = events.find(
+      (event) => event.event === 'learning_session_created',
+    );
+    expect(createdEvent?.data).toMatchObject({
+      type: 'flashcards',
+      title: expect.stringContaining('Cartes ·'),
+    });
+
+    const doneEvent = events.find((event) => event.event === 'done');
+    expect(doneEvent?.data.assistantMessage.content).toContain(
+      'Tes cartes sont prêtes',
+    );
+
+    const loaded = await learningSessionsService.getById(
+      uid,
+      createdEvent!.data.sessionId,
+    );
+    expect(loaded.type).toBe('flashcards');
+    expect(loaded.items).toHaveLength(10);
+    expect(loaded.items[0]).toMatchObject({
+      front: expect.any(String),
+      back: expect.any(String),
+    });
   });
 });

@@ -26,6 +26,7 @@ export type DocumentChunksRepository = {
     chunks: PersistedDocumentChunk[],
   ): Promise<void>;
   deleteChunks(uid: string, documentId: string): Promise<void>;
+  listChunks(uid: string, documentId: string): Promise<PersistedDocumentChunk[]>;
   searchSimilar(
     uid: string,
     queryEmbedding: number[],

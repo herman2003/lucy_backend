@@ -80,4 +80,76 @@ describe('PromptLoaderService', () => {
     expect(rendered).toContain('Je suis étudiant en L2 biologie.');
     expect(rendered).not.toContain('{{');
   });
+
+  it('renders quiz generator prompt with learner profile and difficulty (LEARN-07e)', () => {
+    const system = service.getQuizGeneratorSystemPrompt(CHAT_TUTOR_PROFILE_FIXTURE, 5);
+
+    expect(system).toContain('learning_goal');
+    expect(system).toContain('exam');
+    expect(system).toContain('self_assessed_level');
+    expect(system).toContain('intermediate');
+    expect(system).toContain('sciences');
+    expect(system).toContain('primary_role');
+    expect(system.toLowerCase()).toContain('intermediate difficulty');
+    expect(system).not.toContain('{{');
+  });
+
+  it('adjusts quiz difficulty guidance for advanced learners (LEARN-07e)', () => {
+    const advancedProfile: LearnerProfile = {
+      ...CHAT_TUTOR_PROFILE_FIXTURE,
+      self_assessed_level: 'advanced',
+    };
+
+    const system = service.getQuizGeneratorSystemPrompt(advancedProfile, 5);
+
+    expect(system.toLowerCase()).toContain('nuanced');
+    expect(system.toLowerCase()).not.toContain('foundational');
+  });
+
+  it('renders flashcards generator prompt with learner profile and difficulty (LEARN-07e)', () => {
+    const system = service.getFlashcardsGeneratorSystemPrompt(
+      CHAT_TUTOR_PROFILE_FIXTURE,
+      10,
+    );
+
+    expect(system).toContain('learning_goal');
+    expect(system).toContain('analogies');
+    expect(system).toContain('intermediate');
+    expect(system).not.toContain('{{');
+  });
+
+  it('includes definition and conceptual link guidance in quiz generation (LEARN-09d)', () => {
+    const system = service.getQuizGeneratorSystemPrompt(CHAT_TUTOR_PROFILE_FIXTURE, 5);
+
+    expect(system.toLowerCase()).toContain('definition');
+    expect(system.toLowerCase()).toMatch(/link|relate|relationship/);
+    expect(system.toLowerCase()).toMatch(/isolated|standalone/);
+  });
+
+  it('includes definition and conceptual link guidance in flashcards generation (LEARN-09d)', () => {
+    const system = service.getFlashcardsGeneratorSystemPrompt(
+      CHAT_TUTOR_PROFILE_FIXTURE,
+      10,
+    );
+
+    expect(system.toLowerCase()).toContain('definition');
+    expect(system.toLowerCase()).toMatch(/link|relate|relationship/);
+    expect(system.toLowerCase()).toMatch(/disconnected|isolated|standalone/);
+  });
+
+  it('includes optional exam type context in learning prompts (LEARN-10b)', () => {
+    const quiz = service.getQuizGeneratorSystemPrompt(
+      CHAT_TUTOR_PROFILE_FIXTURE,
+      5,
+      'partiel',
+    );
+    const corpus = service.getCorpusStudyAnalyzerSystemPrompt(
+      CHAT_TUTOR_PROFILE_FIXTURE,
+      'dissertation',
+    );
+
+    expect(quiz).toContain('partiel');
+    expect(corpus).toContain('dissertation');
+    expect(quiz).not.toContain('{{');
+  });
 });

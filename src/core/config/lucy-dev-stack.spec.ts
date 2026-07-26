@@ -18,6 +18,22 @@ describe('lucy-dev-stack', () => {
       firebaseAuthMode: 'dev',
       firestoreProvider: 'memory',
       geminiConfigured: false,
+      openRouterConfigured: false,
+    });
+  });
+
+  it('reports openRouterConfigured when key is set', () => {
+    const config = loadLucyConfig({
+      NODE_ENV: 'development',
+      LLM_PROVIDER: 'openrouter',
+      OPENROUTER_API_KEY: 'sk-or-test',
+      GEMINI_API_KEY: 'gemini-key',
+    });
+
+    expect(describeDevStack(config)).toMatchObject({
+      openRouterConfigured: true,
+      geminiConfigured: true,
+      llmProvider: 'openrouter',
     });
   });
 

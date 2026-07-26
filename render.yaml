@@ -1,0 +1,50 @@
+# Lucy API — Render Blueprint (free web service)
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy: Dashboard → New → Blueprint → connect herman2003/lucy_backend
+# Then fill the secret env vars prompted (sync: false).
+
+services:
+  - type: web
+    name: lucy-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FIREBASE_PROJECT_ID
+        value: lucy-7504c
+      - key: FIREBASE_AUTH_MODE
+        value: firebase
+      - key: FIRESTORE_PROVIDER
+        value: firebase
+      - key: STORAGE_PROVIDER
+        value: r2
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_EMBEDDING_MODEL
+        value: gemini-embedding-001
+      # Firebase Hosting origins (update if you use a custom domain)
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://lucy-7504c.web.app,https://lucy-7504c.firebaseapp.com
+      # Secrets — set once in the Render Dashboard (never commit)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false
+      - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
+        sync: false

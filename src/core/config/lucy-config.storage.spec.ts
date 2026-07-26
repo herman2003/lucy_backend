@@ -32,6 +32,29 @@ describe('loadLucyConfig storage provider', () => {
   });
 });
 
+describe('validateLucyConfig OpenRouter', () => {
+  it('throws when LLM_PROVIDER=openrouter without OPENROUTER_API_KEY', () => {
+    const config = loadLucyConfig({
+      NODE_ENV: 'development',
+      LLM_PROVIDER: 'openrouter',
+      OPENROUTER_API_KEY: '',
+    });
+
+    expect(() => validateLucyConfig(config)).toThrow(/OPENROUTER_API_KEY/);
+  });
+
+  it('passes when OpenRouter key is set', () => {
+    const config = loadLucyConfig({
+      NODE_ENV: 'development',
+      FIRESTORE_PROVIDER: 'memory',
+      LLM_PROVIDER: 'openrouter',
+      OPENROUTER_API_KEY: 'sk-or-test',
+    });
+
+    expect(() => validateLucyConfig(config)).not.toThrow();
+  });
+});
+
 describe('validateLucyConfig R2', () => {
   it('throws when STORAGE_PROVIDER=r2 without credentials', () => {
     const config = loadLucyConfig({
