@@ -1,8 +1,20 @@
 # Lucy Backend (NestJS)
 
-HTTP API for learner onboarding (7 Q/A turns, profile analysis, finalize). Product spec: [`../frontend/SPEC.md`](../frontend/SPEC.md) §4.
+[English](./README.md) · [Deutsch](./README.de.md)
 
-This folder lives next to the Flutter app (`Lucy/frontend/`). It is **not** part of the frontend git repository.
+HTTP API for **Lucy**: onboarding, documents/RAG, chat (SSE), quizzes/flashcards, revision reminders.
+
+| | |
+|---|---|
+| **Live API** | https://lucy-api-yo4k.onrender.com |
+| **Health** | https://lucy-api-yo4k.onrender.com/health |
+| **Frontend (web)** | https://lucy-7504c.web.app |
+| **Frontend repo** | https://github.com/herman2003/lucy_frontend |
+| **This repo** | https://github.com/herman2003/lucy_backend |
+
+Product overview / Flutter client: sibling repo [`lucy_frontend`](https://github.com/herman2003/lucy_frontend) (`SPEC.md`).
+
+> Free Render instances sleep after idle time; first request after wake can take 30–60s.
 
 ## Prerequisites
 
@@ -14,10 +26,9 @@ This folder lives next to the Flutter app (`Lucy/frontend/`). It is **not** part
 ## Quick start
 
 ```bash
-cd backend
 npm install
 cp .env.example .env
-# Edit .env: set GEMINI_API_KEY and uncomment GOOGLE_APPLICATION_CREDENTIALS if needed
+# Edit .env: set GEMINI_API_KEY and GOOGLE_APPLICATION_CREDENTIALS (path to service-account JSON)
 npm run start:dev
 ```
 
@@ -25,11 +36,45 @@ Health check (no auth):
 
 ```bash
 curl -s http://localhost:3001/health
+# Live: curl -s https://lucy-api-yo4k.onrender.com/health
 ```
 
 All onboarding routes use the global prefix `v1` and require a Firebase ID token:
 
 `Authorization: Bearer <Firebase idToken>`
+
+## Docker / Docker Compose
+
+```bash
+cp .env.example .env
+# Fill secrets in .env (never commit .env or *-firebase-adminsdk-*.json)
+
+docker compose up --build
+# → http://localhost:3001/health
+```
+
+Build image only:
+
+```bash
+docker build -t lucy-backend .
+docker run --rm -p 3001:3001 --env-file .env \
+  -e GOOGLE_APPLICATION_CREDENTIALS_JSON="$(cat your-service-account.json | jq -c .)" \
+  lucy-backend
+```
+
+Production entrypoint (`scripts/start-prod.mjs`) writes Firebase Admin credentials from `GOOGLE_APPLICATION_CREDENTIALS_JSON` when set (used on Render).
+
+## Deploy (Render — free)
+
+Blueprint: [`render.yaml`](./render.yaml)
+
+1. Connect this GitHub repo in the [Render Dashboard](https://dashboard.render.com/)
+2. Deploy Blueprint / Web Service (Docker, Free)
+3. Set secret env vars (see `.env.example`): `GEMINI_API_KEY`, R2_*, `GOOGLE_APPLICATION_CREDENTIALS_JSON` (full service-account **JSON content**, not a file path)
+4. Set `CORS_ALLOWED_ORIGINS` to your Firebase Hosting URLs, e.g.  
+   `https://lucy-7504c.web.app,https://lucy-7504c.firebaseapp.com`
+
+Current production service: **https://lucy-api-yo4k.onrender.com**
 
 ## Environment variables
 
@@ -48,6 +93,7 @@ Copy `.env.example` to `.env`. Variables are loaded in `src/core/config/lucy-con
 | `R2_SECRET_ACCESS_KEY` | Yes if `r2` | R2 S3 API secret |
 | `R2_ENDPOINT` | No | Default `https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com` (use EU URL from dashboard if needed) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Dev typical | Path to service account JSON for Firestore + Storage Admin |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | Render / containers | Full service-account JSON as a single env string (written to a temp file at boot) |
 | `FIRESTORE_PROVIDER` | No (dev) | `firebase` (default) or `memory` (local tests without service account) |
 | `LLM_PROVIDER` | Yes | `gemini`, `openrouter`, or `mock` (local dev, no LLM API key) |
 | `GEMINI_API_KEY` | Yes for embeddings + when `LLM_PROVIDER=gemini` | Server-only secret |
@@ -379,6 +425,11 @@ Covers validators, transcript rules, service flows (validate, confirm, analyze, 
 
 ## Production notes
 
-- Run `npm run build` then `npm run start:prod`
+- Run `npm run build` then `npm run start:prod` (or Docker / Render Blueprint)
 - Configure secrets via your host (not committed `.env`)
 - Do not log raw `answerText` in production logs (SPEC §4.6)
+- Live API: https://lucy-api-yo4k.onrender.com — Flutter web: https://lucy-7504c.web.app
+
+---
+
+*Ce document a été créé avec Cursor (IA).*
